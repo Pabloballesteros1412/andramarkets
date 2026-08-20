@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Andra Markets · US Market Close · {{ date_long }}</title>
+<style>{{ css }}</style></head><body>
+
+{# density: wide (6 col) · mid (4 col) · slim (3 col) #}
+{% macro tbl(rows, head="Instrument", density="wide") -%}
+{% set nc = {"wide":6,"mid":4,"slim":3}[density] %}
+<table><thead><tr>
+  <th>{{ head }}</th><th>Close</th><th>1D</th>
+  {% if density == "wide" %}<th>1W</th><th>1M</th>{% endif %}
+  {% if density != "slim" %}<th>YTD</th>{% endif %}
+</tr></thead><tbody>
+{% for r in rows %}
+  {% if r.group %}<tr class="grp"><td colspan="{{ nc }}">{{ r.group }}</td></tr>
+  {% else %}<tr>
+    <td>{{ r.name }}</td>
+    <td>{{ r.last | lvl(r.dec, r.unit) }}</td>
+    <td class="{{ r.chg | dir }}">{{ r.chg | chg(r.unit) }}</td>
+    {% if density == "wide" %}
+    <td class="{{ r.w1 | dir }}">{{ r.w1 | chg(r.unit) }}</td>
+    <td class="{{ r.m1 | dir }}">{{ r.m1 | chg(r.unit) }}</td>
+    {% endif %}
+    {% if density != "slim" %}<td class="{{ r.ytd | dir }}">{{ r.ytd | chg(r.unit) }}</td>{% endif %}
+  </tr>{% endif %}
+{% endfor %}
+</tbody></table>
+{%- endmacro %}
+
+{% macro sec(num, title, note="") -%}
+<div class="sec-head">
+  <span class="sec-num">{{ num }}</span>
+  <span class="sec-title">{{ title }}</span>
+  {% if note %}<span class="sec-note">{{ note }}</span>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro exh(no, title, img, src) -%}
+<figure>
+  <div class="ex-head"><div class="ex-no">Exhibit {{ no }}</div>
+    <div class="ex-title">{{ title }}</div></div>
+  <img src="{{ img }}" alt="">
+  <div class="ex-src">{{ src }}</div>
+</figure>
+{%- endmacro %}
+
+{% macro foot(p) -%}
+<div class="foot">
+  <span>Andra Markets · Global Markets Research</span>
+  <span>US close · {{ date_short }}</span>
+  <span>{{ p }} of {{ pages }}</span>
+</div>
+{%- endmacro %}
+
+<!-- ============================================================= PAGE 1 -->
+<div class="page">
+  <div class="rule-top"></div>
+  <div class="runhead">
+    <div class="mark">Andra Markets</div>
+    <div class="runhead-meta">Global Markets Research<br>Daily close · 4:00 pm ET</div>
+  </div>
+
+  <div class="eyebrow"><b>US Market Close</b><span>{{ date_long }}</span><span>Edition {{ edition }}</span></div>
+  <h1>{{ n.headline }}</h1>
+  <p class="standfirst">{{ n.standfirst }}</p>
+  <div class="byline"><span>Andra Markets Research Desk</span><span>Levels at official close · Published {{ published }}</span></div>
+
+  <div class="section first">
+    {{ sec("1.0", "Market summary", "Levels at official close") }}
+    <div class="g-2">
+      <div><h4 class="t">Equity indices</h4>{{ tbl(t.summary_equity, "Index", "mid") }}</div>
+      <div><h4 class="t">Rates, currencies and commodities</h4>{{ tbl(t.summary_macro, "Instrument", "mid") }}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    {{ sec("2.0", "Key takeaways") }}
+    <div class="g-11">
+      <div><ol class="takeaways">{% for k in n.takeaways %}<li>{{ k }}</li>{% endfor %}</ol></div>
+      <div>
+        <div class="panel">
+          <h4 class="t">Cross-asset risk score</h4>
+          <div class="stat" style="border-top:none;margin-top:0;padding-top:0">
+            <div class="v">{{ barometer.score | num(2) }}</div>
+            <div class="l">{{ barometer.label }}</div>
+          </div>
+          <div class="scale">
+            <div class="scale-bar">
+              <div class="scale-axis"></div>
+              {% for tk in barometer.ticks %}
+              <div class="scale-tick{% if tk.mid %} mid{% endif %}" style="left:{{ tk.pos }}%"></div>{% endfor %}
+              <div class="scale-mark" style="left:{{ barometer.pos }}%"></div>
+            </div>
+            <div class="scale-labels"><span>Risk off</span><span>Neutral</span><span>Risk on</span></div>
+          </div>
+          <p style="font-size:6.6pt;color:var(--muted);margin-top:2.5mm">
+            Composite of {{ barometer.n }} equity, volatility, credit, currency and
+            commodity signals, each scaled by its own one-year daily standard
+            deviation and capped at three.</p>
+        </div>
+        <div class="stat">
+          <div class="v">{{ breadth.advancers }} / {{ breadth.decliners }}</div>
+          <div class="l">Advancers vs decliners · watchlist</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    {{ exh(1, "Regional equity performance, rebased", ex.regions,
+          "Rebased to 100 over the last 60 sessions. Source: Andra Markets.") }}
+  </div>
+  {{ foot(1) }}
+</div>
+
+<!-- ============================================================= PAGE 2 -->
+<div class="page">
+  <div class="section first" style="margin-top:0">
+    {{ sec("3.0", "US equities", "Indices and sector rotation") }}
+    <div class="g-12">
+      <div>
+        {{ tbl(t.us_equity, "Index", "mid") }}
+        <h4>Market breadth</h4>
+        <figure><img src="{{ ex.breadth }}" alt="">
+          <div class="ex-src">Watchlist universe. Cross-sectional dispersion {{ breadth.dispersion | num(2) }} pp.</div></figure>
+      </div>
+      <div class="g-2">
+        <div>{% for p in n.equities.split("\n\n") %}<p>{{ p }}</p>{% endfor %}
+          <div class="panel" style="margin-top:2.5mm">
+            <h4 class="t">Rotation</h4>
+            <p style="font-size:7.2pt">{{ rotation }}</p>
+          </div>
+        </div>
+        <div>{{ exh(2, "S&P 500 sectors, session change", ex.sectors, "Percent change. Source: Andra Markets.") }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    {{ sec("4.0", "Single stocks", "Largest moves in the watchlist") }}
+    <div class="g-2">
+      <div><h4 class="t">Leaders</h4>
+        <table><thead><tr><th>Stock</th><th>Close</th><th>1D</th><th>YTD</th></tr></thead><tbody>
+        {% for m in movers.leaders %}<tr><td>{{ m.name }}</td><td>{{ m.last | num(2) }}</td>
+          <td class="{{ m.chg | dir }}"><span class="chip {{ m.chg | dir }}">{{ m.chg | chg }}</span></td>
+          <td class="{{ m.ytd | dir }}">{{ m.ytd | chg }}</td></tr>{% endfor %}
+        </tbody></table></div>
+      <div><h4 class="t">Laggards</h4>
+        <table><thead><tr><th>Stock</th><th>Close</th><th>1D</th><th>YTD</th></tr></thead><tbody>
+        {% for m in movers.laggards %}<tr><td>{{ m.name }}</td><td>{{ m.last | num(2) }}</td>
+          <td class="{{ m.chg | dir }}"><span class="chip {{ m.chg | dir }}">{{ m.chg | chg }}</span></td>
+          <td class="{{ m.ytd | dir }}">{{ m.ytd | chg }}</td></tr>{% endfor %}
+        </tbody></table></div>
+    </div>
+  </div>
+
+  <div class="section">
+    {{ sec("5.0", "International equities", "Europe · Asia-Pacific · Americas") }}
+    <div class="g-3">
+      <div>{{ tbl(t.europe, "Europe", "mid") }}</div>
+      <div>{{ tbl(t.apac, "Asia-Pacific", "mid") }}</div>
+      <div>{{ tbl(t.americas, "Americas", "mid") }}
+        <p style="margin-top:2.5mm">{{ n.international }}</p></div>
+    </div>
+    <div style="margin-top:3.5mm">
+      {{ exh(3, "Cross-asset returns by horizon", ex.heatmap,
+            "Percent, except rates in basis points. Source: Andra Markets.") }}
+    </div>
+  </div>
+  {{ foot(2) }}
+</div>
+
+<!-- ============================================================= PAGE 3 -->
+<div class="page">
+  <div class="section first" style="margin-top:0">
+    {{ sec("6.0", "Rates", "Treasury curve and inflation expectations") }}
+    <div class="g-21">
+      <div>
+        <div class="g-2">
+          <div>{% for p in n.rates.split("\n\n") %}<p>{{ p }}</p>{% endfor %}</div>
+          <div>{{ exh(4, "US Treasury curve", ex.curve, "Yield in percent, labels in basis points.") }}</div>
+        </div>
+        <div class="g-2" style="margin-top:3mm">
+          <div>{{ tbl(t.curve, "Tenor", "slim") }}</div>
+          <div>{{ tbl(t.breakevens, "Inflation", "slim") }}
+            <h4>Global 10-year sovereigns</h4>
+            {{ tbl(t.sovereigns, "Benchmark", "slim") }}</div>
+        </div>
+      </div>
+      <div>
+        <div class="panel">
+          <h4 class="t">Curve slopes</h4>
+          {% for s in slopes %}
+          <div class="kv"><span>{{ s.name }}</span>
+            <b>{{ s.bp | num(1) }} bp <span class="{{ s.delta | dir }}" style="font-weight:600">({{ s.delta | bp }})</span></b></div>
+          {% endfor %}
+        </div>
+        <div class="panel" style="margin-top:3mm">
+          <h4 class="t">Shape of the move</h4>
+          <p style="font-size:7.2pt">{{ curve_note }}</p>
+        </div>
+        {% if ex.real %}
+        <div style="margin-top:3mm">
+          {{ exh(5, "10-year real yield and breakeven", ex.real, "Last 120 sessions.") }}
+        </div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    {{ sec("7.0", "Credit", "Spreads and risk appetite") }}
+    <div class="g-12">
+      <div>{{ exh(6, "Credit proxies vs one week ago", ex.credit, "Current level against prior week close.") }}</div>
+      <div>
+        <p>{{ n.credit }}</p>
+        {{ tbl(t.credit, "Segment", "wide") }}
+        <p style="font-size:6.2pt;color:var(--faint);margin-top:1.5mm">
+          Segments proxied by benchmark listed vehicles. With an institutional
+          feed, replace with CDX IG, CDX HY, iTraxx Main and Crossover on a
+          spread-to-swap basis.</p>
+      </div>
+    </div>
+  </div>
+  {{ foot(3) }}
+</div>
+
+<!-- ============================================================= PAGE 4 -->
+<div class="page">
+  <div class="section first" style="margin-top:0">
+    {{ sec("8.0", "Foreign exchange", "G10 and emerging markets") }}
+    <div class="g-21">
+      <div>{{ tbl(t.fx, "Pair", "wide") }}</div>
+      <div><p>{{ n.fx }}</p>
+        <div style="margin-top:2.5mm">{{ exh(7, "Currencies against the dollar", ex.fx, "Session change, percent.") }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    {{ sec("9.0", "Commodities", "Energy · Metals · Agriculture") }}
+    <div class="g-21">
+      <div>{{ tbl(t.commodities, "Contract", "wide") }}</div>
+      <div><p>{{ n.commodities }}</p>
+        <div style="margin-top:2.5mm">{{ exh(8, "Commodity complex", ex.commodities, "Session change, percent.") }}</div>
+      </div>
+    </div>
+  </div>
+
+  {% if ex.correlation %}
+  <div class="section">
+    {{ sec("10.0", "Cross-asset correlation", "Trailing 60 sessions") }}
+    <div class="g-12">
+      <div>{{ exh(9, "Correlation of daily returns", ex.correlation, "Lower triangle. Trailing 60 sessions.") }}</div>
+      <div>{% for p in n.correlation.split("\n\n") %}<p>{{ p }}</p>{% endfor %}</div>
+    </div>
+  </div>
+  {% endif %}
+  {{ foot(4) }}
+</div>
+
+<!-- ============================================================= PAGE 5 -->
+<div class="page">
+  <div class="section first" style="margin-top:0">
+    {{ sec("11.0", "Volatility and digital assets") }}
+    <div class="g-3">
+      <div>{{ tbl(t.volatility, "Index", "slim") }}
+        <p style="margin-top:2.5mm">{{ n.volatility }}</p></div>
+      <div>{{ exh(10, "VIX", ex.vix, "Last 120 sessions.") }}</div>
+      <div>{{ tbl(t.digital, "Asset", "slim") }}
+        <p style="margin-top:2.5mm">{{ n.digital }}</p></div>
+    </div>
+  </div>
+
+  <div class="section">
+    {{ sec("12.0", "Desk view") }}
+    <div class="g-11">
+      <div>{% for p in n.desk_view.split("\n\n") %}<p>{{ p }}</p>{% endfor %}</div>
+      <div class="panel">
+        <h4 class="t">What we are watching</h4>
+        <ol class="takeaways" style="margin-top:1.5mm">
+          {% for w in n.watching %}<li style="font-size:7.4pt">{{ w }}</li>{% endfor %}
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  {% if calendar %}
+  <div class="section">
+    {{ sec("13.0", "Calendar", "Next session · all times ET") }}
+    <div class="cal">
+      <div class="cal-row cal-head"><span>Time</span><span>Release</span><span>Consensus</span><span>Prior</span></div>
+      {% for c in calendar %}
+      <div class="cal-row"><span class="t">{{ c.time }}</span><span>{{ c.event }}</span>
+        <span>{{ c.consensus }}</span><span>{{ c.prior }}</span></div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="section">
+    {{ sec("14.0", "Methodology") }}
+    <p style="font-size:6.8pt">Levels are official closing prices for the session
+    shown. Equity, currency and commodity moves are percent changes on the prior
+    close; rates and breakevens are quoted in basis points. The cross-asset risk
+    score is a proprietary composite of {{ barometer.n }} signals, each scaled by
+    its own one-year daily standard deviation and capped at three standard
+    deviations. Breadth is measured across the watchlist, not the full index.
+    Every figure in the text passes an automated trace check against the closing
+    database before the note is released.
+    {% if missing_series %} {{ missing_series }} series had no print this session
+    and are shown as n/a.{% endif %}</p>
+  </div>
+
+  <div class="legal">
+    <b>Disclaimer.</b> This document is produced by Andra Markets for information
+    only. It is not investment advice, a personal recommendation, or an offer or
+    solicitation to buy or sell any financial instrument, and it does not take
+    account of the objectives, financial situation or needs of any recipient.
+    Data is drawn from sources believed to be reliable; accuracy and completeness
+    are not guaranteed. Levels are as of the close shown and may have changed
+    since. Past performance does not predict future returns and all investment
+    carries risk of loss of capital. No part of this document may be reproduced
+    without written permission.
+    {% if not audit_ok %}<br><b>Control note.</b> This edition did not fully pass
+    the automated figure check. Review the flagged sections before distribution.{% endif %}
+  </div>
+  {{ foot(5) }}
+</div>
+</body></html>

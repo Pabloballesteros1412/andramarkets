@@ -1,0 +1,18 @@
+# Andra Markets, US market close
+# Install with:  crontab deploy/crontab.txt
+#
+# The NYSE closes at 4:00 pm ET. The run waits until 4:20 pm so the closing
+# auction has settled and vendors have consolidated the official close.
+# The timezone is set in cron itself, so daylight saving resolves on its own.
+
+TZ=America/New_York
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+20 16 * * 1-5  cd /opt/andramarkets && set -a && . ./.env && set +a && \
+               /usr/bin/python3 run_daily.py >> logs/andra.log 2>&1
+
+# Half days (1:00 pm ET close). The script checks the NYSE calendar and will
+# not publish twice.
+20 13 * * 1-5  cd /opt/andramarkets && set -a && . ./.env && set +a && \
+               /usr/bin/python3 run_daily.py --half-day >> logs/andra.log 2>&1

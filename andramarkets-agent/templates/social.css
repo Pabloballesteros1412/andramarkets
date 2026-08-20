@@ -1,0 +1,118 @@
+/* ==========================================================================
+   ANDRA MARKETS — social frames.
+
+   Deliberately NOT the research note shrunk down. No tables, no repeated
+   skeleton, no boxed charts. Every frame is one of six archetypes and no two
+   consecutive frames share a background. Charts arrive as untitled line art
+   and every label is set here, in type.
+   ========================================================================== */
+:root{
+  --paper:#FFFFFF; --ink:#0B0B0B; --field:#10553C;
+  --grey:#8C8C8C; --dim:#5E5E5E; --hair:#DCDCDC;
+  --pos:#15714E; --neg:#A83224;
+  --pos-d:#63C79B; --neg-d:#E0806C;
+  --sans:"Inter","Neue Haas Grotesk Display","Helvetica Neue","TeX Gyre Heros","Liberation Sans",Arial,sans-serif;
+}
+*{ box-sizing:border-box; margin:0; padding:0; }
+body{
+  font-family:var(--sans); color:var(--ink); background:var(--paper);
+  font-variant-numeric:tabular-nums lining-nums;
+  -webkit-font-feature-settings:"tnum" 1,"kern" 1; text-rendering:geometricPrecision;
+}
+
+/* ---------------------------------------------------------------- frames */
+.f{ position:relative; overflow:hidden; display:flex; flex-direction:column;
+    background:var(--paper); page-break-after:always; }
+.f:last-child{ page-break-after:auto; }
+.f.ink{ background:var(--ink); color:#FFFFFF; }
+.f.field{ background:var(--field); color:#FFFFFF; }
+.f.ink .muted,.f.field .muted{ color:rgba(255,255,255,.55); }
+.f.ink .hair,.f.field .hair{ background:rgba(255,255,255,.28); }
+.muted{ color:var(--grey); }
+.hair{ background:var(--hair); height:1px; width:100%; }
+
+/* running head: the only element that repeats, and it stays tiny */
+.rh{ display:flex; justify-content:space-between; align-items:baseline;
+     letter-spacing:.26em; text-transform:uppercase; font-weight:600; }
+.pg{ position:absolute; letter-spacing:.24em; text-transform:uppercase;
+     font-weight:600; color:var(--grey); }
+.f.ink .pg,.f.field .pg{ color:rgba(255,255,255,.45); }
+
+/* display type */
+.dsp{ font-weight:700; letter-spacing:-.032em; line-height:1.02; }
+.fig{ font-weight:700; letter-spacing:-.045em; line-height:.86; }
+.say{ font-weight:500; letter-spacing:-.018em; }
+.lbl{ letter-spacing:.24em; text-transform:uppercase; font-weight:600; }
+
+/* full-bleed art: pulled out past the padding so the line touches the edge */
+.bleed{ width:100%; display:block; }
+.bleed-wrap{ position:absolute; left:0; right:0; }
+
+/* sector bars, built in type rather than plotted */
+.bars{ width:100%; }
+.bar-row{ display:flex; align-items:center; }
+.bar-name{ flex:0 0 auto; color:var(--dim); }
+.f.ink .bar-name{ color:rgba(255,255,255,.62); }
+.bar-track{ flex:1 1 auto; position:relative; }
+.bar-zero{ position:absolute; top:0; bottom:0; left:50%; width:1px; background:var(--hair); }
+.f.ink .bar-zero{ background:rgba(255,255,255,.22); }
+.bar-fill{ position:absolute; top:50%; transform:translateY(-50%); }
+.bar-val{ flex:0 0 auto; text-align:right; font-weight:600; }
+
+/* stat rows: name left in grey, number right in display size */
+.row{ display:flex; align-items:baseline; justify-content:space-between;
+      border-bottom:1px solid var(--hair); }
+.f.ink .row{ border-bottom-color:rgba(255,255,255,.16); }
+.row:last-child{ border-bottom:none; }
+.row .n{ color:var(--grey); letter-spacing:-.01em; }
+.f.ink .row .n{ color:rgba(255,255,255,.55); }
+.row .v{ font-weight:700; letter-spacing:-.03em; }
+.row .d{ font-weight:600; }
+.pos{ color:var(--pos); } .neg{ color:var(--neg); }
+.f.ink .pos,.f.field .pos{ color:var(--pos-d); }
+.f.ink .neg,.f.field .neg{ color:var(--neg-d); }
+
+/* tenor scale under the curve art */
+.tenors{ display:flex; justify-content:space-between; }
+.tenors span{ letter-spacing:.14em; text-transform:uppercase; color:var(--grey); }
+
+.mark{ font-weight:700; letter-spacing:.26em; text-transform:uppercase; }
+.stack{ margin-top:auto; }
+
+/* ============================ LINKEDIN · 1200 x 1500 ===================== */
+.li .f{ width:1200px; height:1500px; padding:80px; }
+.li .rh{ font-size:19px; }
+.li .pg{ font-size:18px; bottom:74px; right:80px; }
+.li .dsp{ font-size:88px; }
+.li .dsp.sm{ font-size:60px; }
+.li .fig{ font-size:300px; }
+.li .say{ font-size:52px; line-height:1.26; }
+.li .lbl{ font-size:19px; }
+.li p{ font-size:30px; line-height:1.46; }
+.li .bar-row{ height:86px; }
+.li .bar-name{ width:290px; font-size:27px; }
+.li .bar-val{ width:130px; font-size:27px; }
+.li .bar-fill{ height:26px; }
+.li .row{ padding:30px 0; }
+.li .row .n{ font-size:31px; } .li .row .v{ font-size:46px; } .li .row .d{ font-size:31px; }
+.li .tenors span{ font-size:20px; }
+.li .mark{ font-size:40px; }
+
+/* ============================= TIKTOK · 1080 x 1920 ====================== */
+.tt .f{ width:1080px; height:1920px; padding:96px 78px; }
+.tt .rh{ font-size:23px; }
+.tt .pg{ font-size:22px; bottom:88px; right:78px; }
+.tt .dsp{ font-size:104px; }
+.tt .dsp.sm{ font-size:70px; }
+.tt .fig{ font-size:236px; }
+.tt .say{ font-size:64px; line-height:1.22; }
+.tt .lbl{ font-size:24px; }
+.tt p{ font-size:36px; line-height:1.44; }
+.tt .bar-row{ height:104px; }
+.tt .bar-name{ width:280px; font-size:31px; }
+.tt .bar-val{ width:140px; font-size:31px; }
+.tt .bar-fill{ height:32px; }
+.tt .row{ padding:40px 0; }
+.tt .row .n{ font-size:36px; } .tt .row .v{ font-size:58px; } .tt .row .d{ font-size:36px; }
+.tt .tenors span{ font-size:24px; }
+.tt .mark{ font-size:46px; }

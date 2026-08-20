@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><style>{{ social_css }}
+html,body{ width:1080px; }
+</style></head><body class="tt">
+
+<!-- 01 · COVER -->
+<div class="f ink">
+  <div class="rh"><span>Andra Markets</span><span>{{ date_short }}</span></div>
+  <div class="hair" style="margin-top:30px"></div>
+  <div style="margin-top:150px">
+    <div class="lbl muted" style="margin-bottom:44px">US market close</div>
+    <div class="dsp">{{ n.headline }}</div>
+  </div>
+  <div class="lbl muted" style="position:absolute;left:78px;bottom:430px">
+    S&amp;P 500 · 60 sessions</div>
+  <div class="bleed-wrap" style="bottom:0;height:380px">
+    <img class="bleed" src="{{ s.spark_light }}" style="height:380px;object-fit:fill">
+  </div>
+</div>
+
+<!-- 02 · THE NUMBER -->
+<div class="f">
+  <div class="rh muted"><span>{{ s.hero.label }}</span><span></span></div>
+  <div class="stack" style="margin-bottom:70px">
+    <div class="fig {{ s.hero.dir }}" style="margin-left:-16px">{{ s.hero.value }}</div>
+    <div class="hair" style="margin:54px 0 40px 0"></div>
+    <p style="max-width:840px">{{ s.hero.note }}</p>
+  </div>
+  <div class="pg">02</div>
+</div>
+
+<!-- 03 · THE TAPE -->
+<div class="f ink">
+  <div class="lbl muted">Across the board</div>
+  <div class="dsp sm" style="margin:34px 0 60px 0">Where things settled</div>
+  {% for r in s.tape[:6] %}
+  <div class="row"><span class="n">{{ r.name }}</span>
+    <span><span class="v">{{ r.last }}</span>
+    <span class="d {{ r.dir }}" style="margin-left:22px">{{ r.chg }}</span></span></div>
+  {% endfor %}
+  <div class="pg">03</div>
+</div>
+
+<!-- 04 · PULL, green field -->
+<div class="f field">
+  <div class="lbl muted">Takeaway</div>
+  <div class="stack" style="margin-bottom:110px">
+    <img src="{{ s.mark_light }}" style="width:340px;display:block;margin-bottom:54px">
+    <div class="say">{{ n.takeaways[0] }}</div>
+  </div>
+  <div class="pg">04</div>
+</div>
+
+<!-- 05 · SECTORS -->
+<div class="f">
+  <div class="lbl muted">Sector rotation</div>
+  <div class="dsp sm" style="margin:34px 0 60px 0">Who led, who lagged</div>
+  <div class="bars">
+    {% for b in s.sectors %}
+    <div class="bar-row">
+      <div class="bar-name">{{ b.name }}</div>
+      <div class="bar-track"><div class="bar-zero"></div>
+        <div class="bar-fill {{ b.dir }}" style="width:{{ b.width }}%;{{ b.side }}:50%;background:currentColor"></div>
+      </div>
+      <div class="bar-val {{ b.dir }}">{{ b.value }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="pg">05</div>
+</div>
+
+<!-- 06 · PULL, ink -->
+<div class="f ink">
+  <div class="lbl muted">Takeaway</div>
+  <div class="stack" style="margin-bottom:110px">
+    <img src="{{ s.mark_light }}" style="width:340px;display:block;margin-bottom:54px">
+    <div class="say">{{ n.takeaways[1] }}</div>
+  </div>
+  <div class="pg">06</div>
+</div>
+
+<!-- 07 · END CARD -->
+<div class="f">
+  <div class="lbl muted">Desk view</div>
+  <p style="margin-top:44px;font-size:40px;line-height:1.42">{{ s.desk_line }}</p>
+  <div class="stack">
+    <img src="{{ s.mark_dark }}" style="width:340px;display:block;margin-bottom:46px">
+    <div class="mark">Andra Markets</div>
+    <p class="muted" style="margin-top:26px;font-size:28px">
+      Every US close.<br>Information only, not investment advice.</p>
+  </div>
+</div>
+</body></html>
