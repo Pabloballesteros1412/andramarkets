@@ -9,6 +9,9 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+        defaults:
+      run:
+        working-directory: andramarkets-agent
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -39,5 +42,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: andramarkets-${{ github.run_id }}
-          path: out/
+                    path: andramarkets-agent/out/
           retention-days: 90
