@@ -138,4 +138,5 @@ def fact_pack(mf: MarketFrame) -> dict:
         "commodities": blk("commodities"), "volatility": blk("volatility"),
         "digital": blk("digital"),
         "series_without_print": mf.missing,
+        "series_not_yet_published": getattr(mf, "stale", []),
     }
