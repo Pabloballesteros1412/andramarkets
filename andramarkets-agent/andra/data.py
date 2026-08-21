@@ -15,7 +15,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dc_field
 
 import numpy as np
 import pandas as pd
@@ -32,6 +32,7 @@ class MarketFrame:
     snap: pd.DataFrame
     asof: dt.date
     missing: list[str]
+    stale: list[str] = dc_field(default_factory=list)
 
     def block(self, name: str) -> pd.DataFrame:
         keys = [i.key for i in BLOCKS[name] if i.key in self.snap.index]
@@ -110,14 +111,45 @@ def load(asof: dt.date | None = None) -> MarketFrame:
         except Exception as e:  # noqa: BLE001
             log.error("Provider %s failed outright: %s", src, e)
 
-    px = pd.concat(frames, axis=1).sort_index() if frames else pd.DataFrame()
-    px.index = pd.to_datetime(px.index)
-    px = px.ffill(limit=3)
+    raw = pd.concat(frames, axis=1).sort_index() if frames else pd.DataFrame()
+    raw.index = pd.to_datetime(raw.index)
 
-    missing = sorted({i.key for i in all_instruments()} - set(px.columns))
+    # Two views of the same data, and the difference matters.
+    #
+    # Providers do not publish on the same clock: Yahoo has today's row the
+    # moment a market closes, FRED posts the Treasury curve later. Union the
+    # indices and every series that has not printed yet leaves a gap.
+    #
+    # Forward filling closes those gaps, which is what the charts need to draw
+    # a continuous line. But a filled gap makes today's value identical to
+    # yesterday's, and the change computes as exactly zero. That is how a note
+    # ends up stating that the curve did not move when in fact it had not yet
+    # been published.
+    #
+    # So: charts read the filled frame, every change reads the raw one.
+    px = raw.ffill(limit=3)
+
+    missing = sorted({i.key for i in all_instruments()} - set(raw.columns))
     if missing:
         log.warning("No print for %d series: %s", len(missing), ", ".join(missing[:12]))
-    return MarketFrame(px=px, snap=snapshot(px), asof=asof, missing=missing)
+
+    snap = snapshot(raw)
+    stale = _stale(raw, asof)
+    if stale:
+        log.warning("%d series had no print for %s and are quoted at their last "
+                    "close: %s", len(stale), asof, ", ".join(stale[:12]))
+    return MarketFrame(px=px, snap=snap, asof=asof, missing=missing, stale=stale)
+
+
+def _stale(raw: pd.DataFrame, asof: dt.date) -> list[str]:
+    """Series whose most recent print predates the session being reported."""
+    target = pd.Timestamp(asof)
+    out = []
+    for key in raw.columns:
+        s = raw[key].dropna()
+        if not s.empty and s.index[-1].normalize() < target.normalize():
+            out.append(key)
+    return sorted(out)
 
 
 def _ret(s: pd.Series, n: int) -> float:
