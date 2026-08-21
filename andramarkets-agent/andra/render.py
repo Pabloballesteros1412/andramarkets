@@ -318,6 +318,7 @@ def build_context(mf, note, ex, calendar=None, edition=1, social_tmp=None) -> di
                       "width": 8 * 1200, "height": 620},
         "calendar": calendar or [],
         "missing_series": len(mf.missing),
+        "stale_series": len(getattr(mf, "stale", [])),
         "ex": ex,
         "t": {
             "summary_equity": [r for r in snap if r.get("summary") == "equity"],
