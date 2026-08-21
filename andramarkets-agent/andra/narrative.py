@@ -141,12 +141,36 @@ def audit(content: dict, facts: dict) -> list[str]:
     return sorted(set(bad))
 
 
+MAX_TOKENS = int(os.getenv("ANDRA_MAX_TOKENS", "16000"))
+
+
+def _extract_json(txt: str) -> dict:
+    """Read the object out of the reply, tolerating fences and stray prose.
+
+    Models occasionally wrap the payload in a code fence or open with a line
+    of commentary. Rather than trust the shape, take everything between the
+    first brace and the last one.
+    """
+    txt = re.sub(r"```(?:json)?", "", txt).strip()
+    start, end = txt.find("{"), txt.rfind("}")
+    if start == -1 or end == -1:
+        raise ValueError(f"no JSON object in reply (got {len(txt)} chars): "
+                         f"{txt[:200]!r}")
+    return json.loads(txt[start:end + 1])
+
+
 def _call(client, messages: list[dict]) -> dict:
-    r = client.messages.create(model=MODEL, max_tokens=6000,
+    r = client.messages.create(model=MODEL, max_tokens=MAX_TOKENS,
                                system=SYSTEM, messages=messages)
     txt = "".join(b.text for b in r.content if b.type == "text").strip()
-    txt = re.sub(r"^```(?:json)?|```$", "", txt, flags=re.M).strip()
-    return json.loads(txt)
+    if not txt:
+        kinds = [b.type for b in r.content]
+        raise ValueError(f"reply carried no text block (blocks: {kinds}, "
+                         f"stop_reason: {r.stop_reason})")
+    if r.stop_reason == "max_tokens":
+        log.warning("Reply hit the token ceiling and is probably truncated. "
+                    "Raise ANDRA_MAX_TOKENS.")
+    return _extract_json(txt)
 
 
 def write(facts: dict, max_attempts: int = 2) -> Note:
