@@ -142,7 +142,7 @@ def audit(content: dict, facts: dict) -> list[str]:
 
 
 def _call(client, messages: list[dict]) -> dict:
-    r = client.messages.create(model=MODEL, max_tokens=6000, temperature=0.4,
+    r = client.messages.create(model=MODEL, max_tokens=6000,
                                system=SYSTEM, messages=messages)
     txt = "".join(b.text for b in r.content if b.type == "text").strip()
     txt = re.sub(r"^```(?:json)?|```$", "", txt, flags=re.M).strip()
