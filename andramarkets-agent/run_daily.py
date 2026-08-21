@@ -103,9 +103,15 @@ def main() -> int:
         from andra.narrative import write, write_without_model
         try:
             note = write(facts)
-        except Exception as e:  # noqa: BLE001
-            log.error("Writer unavailable (%s). Publishing in quantitative mode.", e)
+        except Exception:  # noqa: BLE001
+            # Log the full traceback. A one-line message is not enough to
+            # diagnose a writer failure from a CI log.
+            log.exception("Writer unavailable. Publishing in quantitative mode.")
             note = write_without_model(facts)
+        else:
+            filled = sum(1 for v in note.content.values() if v)
+            log.info("Note written: %d of %d sections filled.",
+                     filled, len(note.content))
     log.info("Figure check: %s (%d attempts)",
              "passed" if note.audit_ok else f"FAILED {note.unsupported}", note.attempts)
 
