@@ -58,6 +58,8 @@ NEVER USE
   Prefer fell, rose, gave back, held, drifted.
 
 NEVER DO
+- Quote a figure in a form other than the one in the fact pack. If the pack
+  says 0.43, write 0.43, never 0.44. Do not recompute or re-round.
 - Invent, round by feel, or infer any figure. Only numbers present in the
   supplied fact pack may appear in the text.
 - Assert a cause the data does not support.
