@@ -143,37 +143,105 @@ def audit(content: dict, facts: dict) -> list[str]:
 
 MAX_TOKENS = int(os.getenv("ANDRA_MAX_TOKENS", "16000"))
 
+# Fields the note needs. Anything missing after parsing is salvaged by regex
+# rather than throwing the whole reply away.
+FIELDS = ("headline", "standfirst", "takeaways", "equities", "rates", "credit",
+          "fx", "commodities", "volatility", "digital", "international",
+          "correlation", "desk_view", "watching", "linkedin", "tiktok")
+LIST_FIELDS = ("takeaways", "watching")
 
-def _extract_json(txt: str) -> dict:
-    """Read the object out of the reply, tolerating fences and stray prose.
 
-    Models occasionally wrap the payload in a code fence or open with a line
-    of commentary. Rather than trust the shape, take everything between the
-    first brace and the last one.
+def _balanced_object(txt: str) -> str | None:
+    """Return the first complete brace-balanced object, ignoring braces that
+    sit inside strings. Prose before or after it is discarded."""
+    depth, in_str, esc, begin = 0, False, False, None
+    for i, ch in enumerate(txt):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                begin = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and begin is not None:
+                return txt[begin:i + 1]
+    return None
+
+
+def _salvage(txt: str) -> dict:
+    """Last resort: pull each field out of a broken or truncated reply.
+
+    A note with twelve of fourteen sections beats no note at all, so a
+    malformed payload gets mined instead of discarded.
     """
+    out: dict = {}
+    for field in FIELDS:
+        if field in LIST_FIELDS:
+            m = re.search(rf'"{field}"\s*:\s*\[(.*?)\]', txt, re.S)
+            if m:
+                items = re.findall(r'"((?:[^"\\]|\\.)*)"', m.group(1))
+                if items:
+                    out[field] = [i.encode().decode("unicode_escape") for i in items]
+        else:
+            m = re.search(rf'"{field}"\s*:\s*"((?:[^"\\]|\\.)*)"', txt, re.S)
+            if m:
+                out[field] = m.group(1).encode().decode("unicode_escape")
+    return out
+
+
+def parse_reply(txt: str) -> dict:
+    """Turn a model reply into the note dict. Never raises on shape alone."""
     txt = re.sub(r"```(?:json)?", "", txt).strip()
-    start, end = txt.find("{"), txt.rfind("}")
-    if start == -1 or end == -1:
-        raise ValueError(f"no JSON object in reply (got {len(txt)} chars): "
-                         f"{txt[:200]!r}")
-    return json.loads(txt[start:end + 1])
+    blob = _balanced_object(txt)
+    if blob:
+        try:
+            return json.loads(blob)
+        except json.JSONDecodeError as e:
+            log.warning("JSON parse failed (%s). Salvaging fields.", e)
+    salvaged = _salvage(txt)
+    if not salvaged:
+        raise ValueError(f"nothing usable in reply ({len(txt)} chars): {txt[:300]!r}")
+    log.warning("Recovered %d of %d fields from a malformed reply.",
+                len(salvaged), len(FIELDS))
+    return salvaged
 
 
 def _call(client, messages: list[dict]) -> dict:
-    r = client.messages.create(model=MODEL, max_tokens=MAX_TOKENS,
-                               system=SYSTEM, messages=messages)
+    # Prefilling the assistant turn with an opening brace forces the reply to
+    # begin as JSON. It removes the whole class of "Here is the JSON:" failures.
+    r = client.messages.create(
+        model=MODEL, max_tokens=MAX_TOKENS, system=SYSTEM,
+        messages=messages + [{"role": "assistant", "content": "{"}])
+
     txt = "".join(b.text for b in r.content if b.type == "text").strip()
     if not txt:
-        kinds = [b.type for b in r.content]
-        raise ValueError(f"reply carried no text block (blocks: {kinds}, "
-                         f"stop_reason: {r.stop_reason})")
+        raise ValueError(f"reply carried no text (blocks: "
+                         f"{[b.type for b in r.content]}, stop: {r.stop_reason})")
     if r.stop_reason == "max_tokens":
-        log.warning("Reply hit the token ceiling and is probably truncated. "
-                    "Raise ANDRA_MAX_TOKENS.")
-    return _extract_json(txt)
+        log.warning("Reply hit the ceiling and may be truncated. "
+                    "Raise ANDRA_MAX_TOKENS above %d.", MAX_TOKENS)
+    return parse_reply("{" + txt)
 
 
-def write(facts: dict, max_attempts: int = 2) -> Note:
+def _complete(content: dict) -> dict:
+    """Fill any gap so the templates never hit a missing key."""
+    for f in FIELDS:
+        content.setdefault(f, [] if f in LIST_FIELDS else "")
+    if not content.get("headline"):
+        content["headline"] = "Market close"
+    return content
+
+
+def write(facts: dict, max_attempts: int = 3) -> Note:
     from anthropic import Anthropic
     client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     prompt = (f"{SCHEMA}\n\nVerified fact pack for the session. This is the only "
@@ -181,12 +249,19 @@ def write(facts: dict, max_attempts: int = 2) -> Note:
               f"{json.dumps(facts, ensure_ascii=False, default=str)}")
     messages = [{"role": "user", "content": prompt}]
 
-    content, bad = {}, []
+    content, bad, last_error = {}, [], None
     for attempt in range(1, max_attempts + 1):
-        content = _call(client, messages)
+        try:
+            content = _call(client, messages)
+        except Exception as e:  # noqa: BLE001
+            last_error = e
+            log.warning("Attempt %d failed to produce a usable reply: %s", attempt, e)
+            continue
+
         bad = audit(content, facts)
         if not bad:
-            return Note(content, True, [], attempt)
+            return Note(_complete(content), True, [], attempt)
+
         log.warning("Audit %d rejected figures: %s", attempt, bad)
         messages += [
             {"role": "assistant", "content": json.dumps(content, ensure_ascii=False)},
@@ -196,7 +271,12 @@ def write(facts: dict, max_attempts: int = 2) -> Note:
                 f"removed or replaced by the correct value from the pack. Do "
                 f"not introduce any new figure."},
         ]
-    return Note(content, False, bad, max_attempts)
+
+    if content:
+        # Figures still unverified, but the prose is worth publishing with a
+        # warning attached rather than dropping it.
+        return Note(_complete(content), False, bad, max_attempts)
+    raise RuntimeError(f"no usable reply after {max_attempts} attempts: {last_error}")
 
 
 def write_without_model(facts: dict) -> Note:
