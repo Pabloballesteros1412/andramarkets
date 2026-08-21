@@ -67,28 +67,65 @@ NUMBER STYLE
 Percentages to two decimals with a sign: +0.84%, -1.23%. Rate moves in basis
 points: +7bp. US convention for thousands and decimals.
 
-Return one valid JSON object. No markdown, no preamble, no code fence."""
+Follow the output format exactly. No preamble, no sign-off, no markdown."""
 
-SCHEMA = """Exact output shape:
+SCHEMA = """Output format. Write each section after its tag, on the lines
+below it. Use the tags exactly as written, one per line, in this order. Do not
+use JSON, markdown, quotes around sections, or any other wrapper.
 
-{
-  "headline":      "8 to 13 words. A claim with content, not a label.",
-  "standfirst":    "Two sentences. What happened and what it means for positioning.",
-  "takeaways":     ["Four one-sentence conclusions, ordered by importance"],
-  "equities":      "Two paragraphs: indices, sector rotation, breadth, dispersion.",
-  "rates":         "Two paragraphs: curve, shift, breakevens, auctions.",
-  "credit":        "One paragraph: spreads, primary market, tone of credit.",
-  "fx":            "One paragraph: dollar, G10 crosses, EM bloc.",
-  "commodities":   "One paragraph: energy, precious, industrial, ags.",
-  "volatility":    "One paragraph: the vol surface and the cost of protection.",
-  "digital":       "One paragraph: digital assets and their beta to risk.",
-  "international": "One paragraph: European and Asian closes and what they hand New York.",
-  "correlation":   "Two paragraphs on cross-asset correlation and what a break in it would mean.",
-  "desk_view":     "Two paragraphs. What the session confirms or contradicts, and the level that decides it.",
-  "watching":      ["Four concrete catalysts for the next session"],
-  "linkedin":      "LinkedIn caption, 900 to 1300 characters. Plain text. Open with the most informative sentence of the day, no throat-clearing. Short paragraphs separated by a blank line. No hashtags, no emoji, no markdown, no sign-off. End on the level or condition that would change the read.",
-  "tiktok":        "Spoken script for a 7-slide photo carousel, 60 to 90 words total. Same voice, shorter sentences. No hype, no call to action beyond stating what the next session hinges on."
-}"""
+===headline===
+8 to 13 words. A claim with content, not a label.
+
+===standfirst===
+Two sentences. What happened and what it means for positioning.
+
+===takeaways===
+Four one-sentence conclusions, ordered by importance. One per line.
+
+===equities===
+Two paragraphs: indices, sector rotation, breadth, dispersion.
+
+===rates===
+Two paragraphs: curve, shift, breakevens, auctions.
+
+===credit===
+One paragraph: spreads, primary market, tone of credit.
+
+===fx===
+One paragraph: dollar, G10 crosses, EM bloc.
+
+===commodities===
+One paragraph: energy, precious, industrial, ags.
+
+===volatility===
+One paragraph: the vol surface and the cost of protection.
+
+===digital===
+One paragraph: digital assets and their beta to risk.
+
+===international===
+One paragraph: European and Asian closes and what they hand New York.
+
+===correlation===
+Two paragraphs on cross-asset correlation and what a break in it would mean.
+
+===desk_view===
+Two paragraphs. What the session confirms or contradicts, and the level that
+decides it.
+
+===watching===
+Four concrete catalysts for the next session. One per line.
+
+===linkedin===
+LinkedIn caption, 900 to 1300 characters. Plain text. Open with the most
+informative sentence of the day, no throat-clearing. Short paragraphs separated
+by a blank line. No hashtags, no emoji, no markdown, no sign-off. End on the
+level or condition that would change the read.
+
+===tiktok===
+Spoken script for a 7-slide photo carousel, 60 to 90 words total. Same voice,
+shorter sentences. No hype.
+"""
 
 
 @dataclass
@@ -151,77 +188,51 @@ FIELDS = ("headline", "standfirst", "takeaways", "equities", "rates", "credit",
 LIST_FIELDS = ("takeaways", "watching")
 
 
-def _balanced_object(txt: str) -> str | None:
-    """Return the first complete brace-balanced object, ignoring braces that
-    sit inside strings. Prose before or after it is discarded."""
-    depth, in_str, esc, begin = 0, False, False, None
-    for i, ch in enumerate(txt):
-        if in_str:
-            if esc:
-                esc = False
-            elif ch == "\\":
-                esc = True
-            elif ch == '"':
-                in_str = False
-            continue
-        if ch == '"':
-            in_str = True
-        elif ch == "{":
-            if depth == 0:
-                begin = i
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0 and begin is not None:
-                return txt[begin:i + 1]
-    return None
-
-
-def _salvage(txt: str) -> dict:
-    """Last resort: pull each field out of a broken or truncated reply.
-
-    A note with twelve of fourteen sections beats no note at all, so a
-    malformed payload gets mined instead of discarded.
-    """
-    out: dict = {}
-    for field in FIELDS:
-        if field in LIST_FIELDS:
-            m = re.search(rf'"{field}"\s*:\s*\[(.*?)\]', txt, re.S)
-            if m:
-                items = re.findall(r'"((?:[^"\\]|\\.)*)"', m.group(1))
-                if items:
-                    out[field] = [i.encode().decode("unicode_escape") for i in items]
-        else:
-            m = re.search(rf'"{field}"\s*:\s*"((?:[^"\\]|\\.)*)"', txt, re.S)
-            if m:
-                out[field] = m.group(1).encode().decode("unicode_escape")
-    return out
+_TAG = re.compile(r"^\s*=+\s*(\w+)\s*=+\s*$", re.M)
 
 
 def parse_reply(txt: str) -> dict:
-    """Turn a model reply into the note dict. Never raises on shape alone."""
-    txt = re.sub(r"```(?:json)?", "", txt).strip()
-    blob = _balanced_object(txt)
-    if blob:
-        try:
-            return json.loads(blob)
-        except json.JSONDecodeError as e:
-            log.warning("JSON parse failed (%s). Salvaging fields.", e)
-    salvaged = _salvage(txt)
-    if not salvaged:
-        raise ValueError(f"nothing usable in reply ({len(txt)} chars): {txt[:300]!r}")
-    log.warning("Recovered %d of %d fields from a malformed reply.",
-                len(salvaged), len(FIELDS))
-    return salvaged
+    """Split a tagged reply into sections.
+
+    Plain delimiters beat JSON here: prose carries newlines, quotes and
+    apostrophes, and every one of those breaks a JSON string if the model
+    escapes it imperfectly. A tag on its own line cannot be broken by content.
+    Truncation costs the last section instead of the whole reply.
+    """
+    txt = re.sub(r"```[a-z]*", "", txt).strip()
+    marks = list(_TAG.finditer(txt))
+    if not marks:
+        raise ValueError(f"no section tags in reply ({len(txt)} chars): "
+                         f"{txt[:300]!r}")
+
+    out: dict = {}
+    for i, m in enumerate(marks):
+        name = m.group(1).strip().lower()
+        if name not in FIELDS:
+            continue
+        stop = marks[i + 1].start() if i + 1 < len(marks) else len(txt)
+        body = txt[m.end():stop].strip()
+        if not body:
+            continue
+        if name in LIST_FIELDS:
+            items = [re.sub(r"^\s*(?:[-*\u2022]|\d+[.)])\s*", "", ln).strip()
+                     for ln in body.splitlines() if ln.strip()]
+            out[name] = [i for i in items if i]
+        else:
+            out[name] = re.sub(r"\n{3,}", "\n\n", body)
+
+    if not out:
+        raise ValueError(f"tags found but every section was empty: {txt[:300]!r}")
+    missing = [f for f in FIELDS if f not in out]
+    if missing:
+        log.warning("Reply is missing %d section(s): %s", len(missing),
+                    ", ".join(missing))
+    return out
 
 
 def _call(client, messages: list[dict]) -> dict:
-    # Prefilling the assistant turn with an opening brace forces the reply to
-    # begin as JSON. It removes the whole class of "Here is the JSON:" failures.
-    r = client.messages.create(
-        model=MODEL, max_tokens=MAX_TOKENS, system=SYSTEM,
-        messages=messages + [{"role": "assistant", "content": "{"}])
-
+    r = client.messages.create(model=MODEL, max_tokens=MAX_TOKENS,
+                               system=SYSTEM, messages=messages)
     txt = "".join(b.text for b in r.content if b.type == "text").strip()
     if not txt:
         raise ValueError(f"reply carried no text (blocks: "
@@ -229,7 +240,9 @@ def _call(client, messages: list[dict]) -> dict:
     if r.stop_reason == "max_tokens":
         log.warning("Reply hit the ceiling and may be truncated. "
                     "Raise ANDRA_MAX_TOKENS above %d.", MAX_TOKENS)
-    return parse_reply("{" + txt)
+    if os.getenv("ANDRA_DEBUG_REPLY"):
+        log.info("Raw reply, first 600 chars: %r", txt[:600])
+    return parse_reply(txt)
 
 
 def _complete(content: dict) -> dict:
@@ -239,6 +252,18 @@ def _complete(content: dict) -> dict:
     if not content.get("headline"):
         content["headline"] = "Market close"
     return content
+
+
+def _as_tagged(content: dict) -> str:
+    """Render a parsed note back into the tagged format for the retry turn."""
+    parts = []
+    for f in FIELDS:
+        v = content.get(f)
+        if not v:
+            continue
+        body = "\n".join(v) if isinstance(v, list) else v
+        parts.append(f"==={f}===\n{body}")
+    return "\n\n".join(parts)
 
 
 def write(facts: dict, max_attempts: int = 3) -> Note:
@@ -264,7 +289,7 @@ def write(facts: dict, max_attempts: int = 3) -> Note:
 
         log.warning("Audit %d rejected figures: %s", attempt, bad)
         messages += [
-            {"role": "assistant", "content": json.dumps(content, ensure_ascii=False)},
+            {"role": "assistant", "content": _as_tagged(content)},
             {"role": "user", "content":
                 f"The figure check rejected these because they are not in the "
                 f"fact pack: {bad}. Return the full JSON again with those "
