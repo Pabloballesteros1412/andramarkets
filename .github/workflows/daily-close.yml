@@ -5,6 +5,11 @@ on:
     - cron: "20 20 * * 1-5"
     - cron: "20 21 * * 1-5"
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Force run even on a non-trading day"
+        type: boolean
+        default: false
 
 jobs:
   publish:
@@ -35,7 +40,7 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
-        run: python run_daily.py
+        run: python run_daily.py ${{ inputs.force && '--force' || '' }}
 
       - name: Archive the edition
         uses: actions/upload-artifact@v4
