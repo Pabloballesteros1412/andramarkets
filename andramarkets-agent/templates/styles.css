@@ -13,7 +13,7 @@
   --pos-bg:#EAF1ED; --neg-bg:#F6EAE9;
   --sans:"Inter","Neue Haas Grotesk Display","Helvetica Neue","TeX Gyre Heros","Liberation Sans",Arial,sans-serif;
 }
-@page{ size:A4; margin:0; }
+@page{ size:A4; margin:13mm 17mm 12mm 17mm; }
 *{ box-sizing:border-box; }
 html,body{
   margin:0; padding:0; background:var(--paper); color:var(--text);
@@ -22,10 +22,10 @@ html,body{
   -webkit-font-feature-settings:"tnum" 1,"kern" 1; text-rendering:geometricPrecision;
 }
 .page{
-  width:210mm; height:296.8mm; overflow:hidden; padding:13mm 17mm 10mm 17mm;
-  display:flex; flex-direction:column; page-break-after:always; background:var(--paper);
+  background:var(--paper); break-after:page;
 }
-.page:last-child{ page-break-after:auto; }
+/* explicit page breaks where the layout wants one */
+.page:last-child{ break-after:auto; }
 
 .rule-top{ height:1.7pt; background:var(--ink); margin-bottom:2.6mm; }
 .runhead{ display:flex; align-items:baseline; justify-content:space-between;
@@ -43,6 +43,8 @@ h1{ font-size:20pt; font-weight:700; line-height:1.16; letter-spacing:-.022em;
   text-transform:uppercase; color:var(--faint); border-top:.4pt solid var(--soft); padding-top:2mm; }
 
 .section{ margin-top:4mm; break-inside:avoid; }
+.sec-head{ break-after:avoid; }
+figure, table, .panel, .stat, .takeaways li{ break-inside:avoid; }
 .section.first{ margin-top:5mm; }
 .sec-head{ display:flex; align-items:baseline; gap:3.2mm; border-bottom:.9pt solid var(--ink);
   padding-bottom:1.5mm; margin-bottom:3.2mm; }
