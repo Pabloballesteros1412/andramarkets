@@ -110,28 +110,28 @@
     {{ exh(1, "Regional equity performance, rebased", ex.regions,
           "Rebased to 100 over the last 60 sessions. Source: Andra Markets.") }}
   </div>
-  {{ foot(1) }}
-</div>
+  </div>
 
 <!-- ============================================================= PAGE 2 -->
 <div class="page">
   <div class="section first" style="margin-top:0">
     {{ sec("3.0", "US equities", "Indices and sector rotation") }}
-    <div class="g-12">
+    <div class="g-11">
       <div>
         {{ tbl(t.us_equity, "Index", "mid") }}
         <h4>Market breadth</h4>
         <figure><img src="{{ ex.breadth }}" alt="">
           <div class="ex-src">Watchlist universe. Cross-sectional dispersion {{ breadth.dispersion | num(2) }} pp.</div></figure>
-      </div>
-      <div class="g-2">
-        <div>{% for p in n.equities.split("\n\n") %}<p>{{ p }}</p>{% endfor %}
-          <div class="panel" style="margin-top:2.5mm">
-            <h4 class="t">Rotation</h4>
-            <p style="font-size:7.2pt">{{ rotation }}</p>
-          </div>
+        <div class="panel" style="margin-top:3mm">
+          <h4 class="t">Rotation</h4>
+          <p style="font-size:7.2pt">{{ rotation }}</p>
         </div>
-        <div>{{ exh(2, "S&P 500 sectors, session change", ex.sectors, "Percent change. Source: Andra Markets.") }}</div>
+      </div>
+      <div>
+        {{ exh(2, "S&P 500 sectors, session change", ex.sectors, "Percent change. Source: Andra Markets.") }}
+        <div style="margin-top:3mm">
+          {% for p in n.equities.split("\n\n") %}<p>{{ p }}</p>{% endfor %}
+        </div>
       </div>
     </div>
   </div>
@@ -159,16 +159,15 @@
     <div class="g-3">
       <div>{{ tbl(t.europe, "Europe", "mid") }}</div>
       <div>{{ tbl(t.apac, "Asia-Pacific", "mid") }}</div>
-      <div>{{ tbl(t.americas, "Americas", "mid") }}
-        <p style="margin-top:2.5mm">{{ n.international }}</p></div>
+      <div>{{ tbl(t.americas, "Americas", "mid") }}</div>
     </div>
-    <div style="margin-top:3.5mm">
-      {{ exh(3, "Cross-asset returns by horizon", ex.heatmap,
-            "Percent, except rates in basis points. Source: Andra Markets.") }}
+    <div class="g-11" style="margin-top:4mm">
+      <div>{{ exh(3, "Cross-asset returns by horizon", ex.heatmap,
+            "Percent, except rates in basis points. Source: Andra Markets.") }}</div>
+      <div>{% for p in n.international.split("\n\n") %}<p>{{ p }}</p>{% endfor %}</div>
     </div>
   </div>
-  {{ foot(2) }}
-</div>
+  </div>
 
 <!-- ============================================================= PAGE 3 -->
 <div class="page">
@@ -221,8 +220,7 @@
       </div>
     </div>
   </div>
-  {{ foot(3) }}
-</div>
+  </div>
 
 <!-- ============================================================= PAGE 4 -->
 <div class="page">
@@ -255,8 +253,7 @@
     </div>
   </div>
   {% endif %}
-  {{ foot(4) }}
-</div>
+  </div>
 
 <!-- ============================================================= PAGE 5 -->
 <div class="page">
@@ -308,7 +305,10 @@
     Every figure in the text passes an automated trace check against the closing
     database before the note is released.
     {% if missing_series %} {{ missing_series }} series had no print this session
-    and are shown as n/a.{% endif %}</p>
+    and are shown as n/a.{% endif %}
+    {% if stale_series %} {{ stale_series }} series had not published for this
+    session at the time of writing and are quoted at their last available close;
+    their change is measured against the print before it.{% endif %}</p>
   </div>
 
   <div class="legal">
