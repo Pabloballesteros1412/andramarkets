@@ -180,7 +180,7 @@ def audit(content: dict, facts: dict) -> list[str]:
     return sorted(set(bad))
 
 
-MAX_TOKENS = int(os.getenv("ANDRA_MAX_TOKENS", "32000"))
+MAX_TOKENS = int(os.getenv("ANDRA_MAX_TOKENS", "8000"))
 
 # Fields the note needs. Anything missing after parsing is salvaged by regex
 # rather than throwing the whole reply away.
