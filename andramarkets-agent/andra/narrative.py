@@ -180,7 +180,7 @@ def audit(content: dict, facts: dict) -> list[str]:
     return sorted(set(bad))
 
 
-MAX_TOKENS = int(os.getenv("ANDRA_MAX_TOKENS", "16000"))
+MAX_TOKENS = int(os.getenv("ANDRA_MAX_TOKENS", "32000"))
 
 # Fields the note needs. Anything missing after parsing is salvaged by regex
 # rather than throwing the whole reply away.
@@ -233,14 +233,37 @@ def parse_reply(txt: str) -> dict:
 
 
 def _call(client, messages: list[dict]) -> dict:
-    r = client.messages.create(model=MODEL, max_tokens=MAX_TOKENS,
-                               system=SYSTEM, messages=messages)
-    txt = "".join(b.text for b in r.content if b.type == "text").strip()
+    # Writing a note from an already-computed fact pack does not need extended
+    # thinking, and leaving it on is what drained the token budget in
+    # production: the model spent its whole allowance reasoning and never wrote
+    # the note. Turn thinking off explicitly and fall back cleanly on any SDK
+    # or model that will not accept the parameter.
+    kwargs = dict(model=MODEL, max_tokens=MAX_TOKENS, system=SYSTEM,
+                  messages=messages, temperature=0.4,
+                  thinking={"type": "disabled"})
+    try:
+        r = client.messages.create(**kwargs)
+    except TypeError:
+        kwargs.pop("thinking", None)
+        r = client.messages.create(**kwargs)
+    except Exception as e:  # noqa: BLE001
+        if "thinking" in str(e).lower():
+            kwargs.pop("thinking", None)
+            r = client.messages.create(**kwargs)
+        else:
+            raise
+
+    txt = "".join(getattr(b, "text", "") for b in r.content
+                  if b.type == "text").strip()
     if not txt:
-        raise ValueError(f"reply carried no text (blocks: "
-                         f"{[b.type for b in r.content]}, stop: {r.stop_reason})")
+        kinds = [b.type for b in r.content]
+        hint = (f" The model used its whole budget before writing. "
+                f"Raise ANDRA_MAX_TOKENS above {MAX_TOKENS}."
+                if r.stop_reason == "max_tokens" else "")
+        raise ValueError(f"reply carried no text (blocks: {kinds}, "
+                         f"stop: {r.stop_reason}).{hint}")
     if r.stop_reason == "max_tokens":
-        log.warning("Reply hit the ceiling and may be truncated. "
+        log.warning("Reply hit the token ceiling and may be truncated. "
                     "Raise ANDRA_MAX_TOKENS above %d.", MAX_TOKENS)
     if os.getenv("ANDRA_DEBUG_REPLY"):
         log.info("Raw reply, first 600 chars: %r", txt[:600])
@@ -294,7 +317,7 @@ def write(facts: dict, max_attempts: int = 3) -> Note:
             {"role": "assistant", "content": _as_tagged(content)},
             {"role": "user", "content":
                 f"The figure check rejected these because they are not in the "
-                f"fact pack: {bad}. Return the full JSON again with those "
+                f"fact pack: {bad}. Return the full note again with those "
                 f"removed or replaced by the correct value from the pack. Do "
                 f"not introduce any new figure."},
         ]
