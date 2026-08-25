@@ -1,220 +1,314 @@
-/* ==========================================================================
-   ANDRA MARKETS — Global Markets Research
-   Print stylesheet, daily market close.
+"""Writing, with a numeric guardrail.
 
-   Constraints: no blue anywhere. Colour is reserved for data. Structure is
-   carried by weight, rules and whitespace. Grotesque sans throughout.
-   No justified text, no drop caps, no running prose columns.
-   ========================================================================== */
-:root{
-  --ink:#0E0E0E; --text:#2B2B2B; --muted:#767676; --faint:#A6A6A6;
-  --rule:#D2D2D2; --soft:#EBEBEB; --panel:#F5F5F5; --paper:#FFFFFF;
-  --pos:#12684A; --neg:#9C2A22; --flat:#767676;
-  --pos-bg:#EAF1ED; --neg-bg:#F6EAE9;
-  --sans:"Inter","Neue Haas Grotesk Display","Helvetica Neue","TeX Gyre Heros","Liberation Sans",Arial,sans-serif;
-}
-@page{ size:A4; margin:13mm 17mm 12mm 17mm; }
-*{ box-sizing:border-box; }
-html,body{
-  margin:0; padding:0; background:var(--paper); color:var(--text);
-  font-family:var(--sans); font-size:8.3pt; line-height:1.50;
-  letter-spacing:-.002em; font-variant-numeric:tabular-nums lining-nums;
-  -webkit-font-feature-settings:"tnum" 1,"kern" 1; text-rendering:geometricPrecision;
-}
-.page{
-  background:var(--paper);
-}
-/* Content flows continuously. Whole sections are kept off page breaks so
-   nothing splits mid-block, but no page is padded with empty space. */
-.section{ break-inside:avoid; }
+Three passes separate a publishable note from an automated bulletin:
 
-.rule-top{ height:1.7pt; background:var(--ink); margin-bottom:2.6mm; }
-.runhead{ display:flex; align-items:baseline; justify-content:space-between;
-  padding-bottom:2.2mm; border-bottom:.4pt solid var(--rule); }
-.mark{ font-size:9.4pt; font-weight:700; letter-spacing:.25em; text-transform:uppercase; color:var(--ink); }
-.runhead-meta{ font-size:6.1pt; letter-spacing:.15em; text-transform:uppercase; color:var(--muted); text-align:right; }
+  1. WRITE    The model gets only the verified fact pack from
+              analytics.fact_pack(). It does not browse, recall or estimate.
+  2. AUDIT    Every figure in the returned text is checked against the set of
+              permitted values, with a rounding tolerance.
+  3. REWRITE  The text goes back with offending figures flagged. On a second
+              failure the note ships with a warning in the email subject.
 
-.eyebrow{ font-size:6.2pt; font-weight:600; letter-spacing:.20em; text-transform:uppercase;
-  color:var(--muted); display:flex; gap:5mm; margin:5.5mm 0 2.8mm 0; }
-.eyebrow b{ color:var(--ink); font-weight:700; }
-h1{ font-size:20pt; font-weight:700; line-height:1.16; letter-spacing:-.022em;
-  color:var(--ink); margin:0 0 2.8mm 0; max-width:150mm; }
-.standfirst{ font-size:9.4pt; line-height:1.48; color:var(--text); max-width:150mm; margin:0 0 3.6mm 0; }
-.byline{ display:flex; justify-content:space-between; font-size:6.1pt; letter-spacing:.14em;
-  text-transform:uppercase; color:var(--faint); border-top:.4pt solid var(--soft); padding-top:2mm; }
+Net effect: a number never reaches print unless it is in the database.
+"""
+from __future__ import annotations
 
-.section{ margin-top:4mm; break-inside:avoid; }
-.sec-head{ break-after:avoid; }
-figure, table, .panel, .stat, .takeaways li{ break-inside:avoid; }
-.section.first{ margin-top:5mm; }
-.sec-head{ display:flex; align-items:baseline; gap:3.2mm; border-bottom:.9pt solid var(--ink);
-  padding-bottom:1.5mm; margin-bottom:3.2mm; }
-.sec-num{ font-size:6.4pt; font-weight:700; color:var(--faint); }
-.sec-title{ font-size:8.6pt; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--ink); }
-.sec-note{ margin-left:auto; font-size:6.1pt; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); }
-h4{ font-size:6.4pt; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
-  color:var(--muted); margin:3.4mm 0 1.6mm 0; }
-h4.t{ margin-top:0; }
-p{ margin:0 0 2.4mm 0; } p:last-child{ margin-bottom:0; }
+import json
+import logging
+import os
+import re
+from dataclasses import dataclass, field
 
-.g-2{ display:grid; grid-template-columns:1fr 1fr; gap:8mm; }
-.g-3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:6.5mm; }
-.g-21{ display:grid; grid-template-columns:2fr 1fr; gap:8mm; }
-.g-12{ display:grid; grid-template-columns:1fr 1.6fr; gap:8mm; }
-.g-11{ display:grid; grid-template-columns:1.3fr 1fr; gap:8mm; }
+log = logging.getLogger("andra.narrative")
 
-table{ width:100%; border-collapse:collapse; font-size:7.2pt; }
-thead th{ font-size:5.9pt; font-weight:600; letter-spacing:.11em; text-transform:uppercase;
-  color:var(--muted); text-align:right; white-space:nowrap; padding:0 0 1.4mm 0;
-  border-bottom:.8pt solid var(--ink); }
-thead th:first-child{ text-align:left; }
-thead th + th{ padding-left:2.6mm; }
-tbody td{ padding:1.12mm 0; text-align:right; white-space:nowrap;
-  border-bottom:.3pt solid var(--soft); color:var(--text); }
-tbody td + td{ padding-left:2.6mm; }
-tbody td:first-child{ text-align:left; color:var(--ink); font-weight:500; }
-tbody tr:last-child td{ border-bottom:.8pt solid var(--ink); }
-tbody tr.grp td{ background:var(--panel); color:var(--muted); font-size:5.9pt; font-weight:700;
-  letter-spacing:.13em; text-transform:uppercase; padding:1.2mm 1.6mm; border-bottom:none; }
-.pos{ color:var(--pos); } .neg{ color:var(--neg); } .nil{ color:var(--flat); }
-.chip{ display:inline-block; min-width:12mm; padding:.35mm 1.4mm; text-align:right; font-weight:600; }
-.chip.pos{ background:var(--pos-bg); } .chip.neg{ background:var(--neg-bg); }
+MODEL = os.getenv("ANDRA_MODEL", "claude-sonnet-5")
+TOLERANCE = 0.02
 
-.takeaways{ list-style:none; margin:0; padding:0; counter-reset:tk; }
-.takeaways li{ position:relative; padding-left:7mm; margin-bottom:2.9mm; font-size:8.3pt; line-height:1.46; }
-.takeaways li::before{ counter-increment:tk; content:counter(tk); position:absolute; left:0; top:.1mm;
-  font-size:6.4pt; font-weight:700; color:var(--ink); border-bottom:.8pt solid var(--ink); padding-bottom:.3mm; }
+SYSTEM = """You write the daily US market close note for Andra Markets, a
+markets research desk. The note goes out under the house name and is read by
+people who trade for a living.
 
-.panel{ background:var(--panel); padding:3.2mm 3.6mm; }
-.kv{ display:flex; justify-content:space-between; align-items:baseline; font-size:7.4pt;
-  padding:1.15mm 0; border-bottom:.3pt solid var(--rule); }
-.kv:last-child{ border-bottom:none; }
-.kv span{ color:var(--muted); } .kv b{ color:var(--ink); font-weight:600; }
-.stat{ border-top:.9pt solid var(--ink); padding-top:1.8mm; margin-top:2mm; }
-.stat .v{ font-size:16pt; font-weight:700; color:var(--ink); line-height:1; letter-spacing:-.025em; }
-.stat .l{ font-size:6.1pt; letter-spacing:.15em; text-transform:uppercase; color:var(--muted); margin-top:1.3mm; }
+VOICE
+Write like a strategist typing a note at 4:30pm, not like a press release.
+Short declarative sentences. Concrete nouns. Lead each paragraph with the
+conclusion, then the evidence. Vary sentence length. Say what the market
+bought and what it sold it against. If you do not know why something moved,
+describe the setup and stop.
 
-.scale{ margin-top:2.5mm; }
-.scale-bar{ position:relative; height:8mm; }
-.scale-axis{ position:absolute; top:4.6mm; left:0; right:0; height:.6pt; background:var(--ink); }
-.scale-tick{ position:absolute; top:4.6mm; width:.4pt; height:1.5mm; background:var(--rule); }
-.scale-tick.mid{ background:var(--ink); height:2.3mm; top:3.9mm; }
-.scale-mark{ position:absolute; top:1.2mm; width:0; height:0; border-left:1.5mm solid transparent;
-  border-right:1.5mm solid transparent; border-top:2.3mm solid var(--ink); transform:translateX(-1.5mm); }
-.scale-labels{ display:flex; justify-content:space-between; font-size:5.7pt; letter-spacing:.13em;
-  text-transform:uppercase; color:var(--faint); }
+NEVER USE
+- Em dashes. Use a comma, a full stop, or a colon.
+- The "not just X, but Y" construction, or any negative parallelism.
+- Three-item lists used for rhythm rather than because there are three things.
+- Present participle tails that add fake depth: "highlighting", "underscoring",
+  "reflecting broader", "signaling a shift", "marking a turning point".
+- Significance padding: pivotal, crucial, vital, key moment, testament,
+  landscape, era, watershed, unprecedented, remarkable, notably, importantly.
+- Corporate filler: leverage, navigate, robust, dynamic, seamless, delve,
+  ecosystem, headwinds and tailwinds used as decoration.
+- Rhetorical questions, second person, exclamation marks, emoji, bold or
+  italic markup, bullet symbols inside a paragraph.
+- Hedging stacks: "it is worth noting that", "it remains to be seen",
+  "only time will tell", "in an environment where".
+- Tabloid verbs: plunge, soar, crater, skyrocket, hammered, bloodbath.
+  Prefer fell, rose, gave back, held, drifted.
 
-figure{ margin:0; break-inside:avoid; }
-figure img{ width:100%; display:block; }
-.ex-head{ margin-bottom:1.5mm; }
-.ex-no{ font-size:5.9pt; font-weight:700; letter-spacing:.15em; text-transform:uppercase; color:var(--ink); }
-.ex-title{ font-size:7.4pt; font-weight:600; color:var(--ink); margin-top:.5mm; }
-.ex-src{ font-size:5.7pt; color:var(--faint); margin-top:1.1mm; border-top:.3pt solid var(--soft); padding-top:1mm; }
+NEVER DO
+- Quote a figure in a form other than the one in the fact pack. If the pack
+  says 0.43, write 0.43, never 0.44. Do not recompute or re-round.
+- Invent, round by feel, or infer any figure. Only numbers present in the
+  supplied fact pack may appear in the text.
+- Assert a cause the data does not support.
+- Give investment advice, price targets, or any buy or sell language.
 
-.cal{ font-size:7.2pt; }
-.cal-row{ display:grid; grid-template-columns:14mm 1fr 22mm 22mm; gap:2mm; padding:1.3mm 0;
-  border-bottom:.3pt solid var(--soft); }
-.cal-row span:nth-child(3),.cal-row span:nth-child(4){ text-align:right; }
-.cal-row .t{ font-weight:600; color:var(--ink); font-size:6.6pt; }
-.cal-head{ font-size:5.9pt; font-weight:600; letter-spacing:.11em; text-transform:uppercase;
-  color:var(--muted); border-bottom:.8pt solid var(--ink); }
+NUMBER STYLE
+Percentages to two decimals with a sign: +0.84%, -1.23%. Rate moves in basis
+points: +7bp. US convention for thousands and decimals.
 
-.foot{ margin-top:auto; padding-top:2.4mm; border-top:.4pt solid var(--rule); display:flex;
-  justify-content:space-between; font-size:5.7pt; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); }
-.legal{ font-size:5.9pt; line-height:1.52; color:var(--muted); border-top:.8pt solid var(--ink);
-  padding-top:2.4mm; margin-top:4mm; }
-.legal b{ color:var(--ink); font-weight:600; }
+Follow the output format exactly. No preamble, no sign-off, no markdown."""
 
-/* ==========================================================================
-   SOCIAL CAROUSELS
+SCHEMA = """Output format. Write each section after its tag, on the lines
+below it. Use the tags exactly as written, one per line, in this order. Do not
+use JSON, markdown, quotes around sections, or any other wrapper.
 
-   Art direction, not a shrunken report. One continuous market line runs across
-   every slide of a carousel at the same height, so the curve carries on when
-   the reader swipes. Composition varies slide to slide: dense data next to
-   near-empty statements, numerals cropped at the trim, bars that run to the
-   edge instead of sitting inside a chart box.
-   ========================================================================== */
-.slide{
-  position:relative; overflow:hidden; background:var(--paper);
-  page-break-after:always; display:block;
-}
-.slide:last-child{ page-break-after:auto; }
-.slide.ink{ background:var(--ink); color:#CFCFCF; }
-.slide.ink .lab{ color:#8A8A8A; }
-.slide.ink .disp, .slide.ink .say, .slide.ink .mark{ color:#FFFFFF; }
-.slide.ink .hair{ background:#2E2E2E; }
-.slide.ink .rail i{ background:#3A3A3A; }
-.slide.ink .rail i.on{ background:#FFFFFF; }
+Write tightly. Every paragraph must earn its space. A shorter note with no
+filler beats a long one padded to length. Do not restate a table in prose; say
+what the numbers mean.
 
-/* the running line: one wide image, a different window per slide */
-.band{
-  position:absolute; left:0; right:0;
-  background-repeat:no-repeat; background-position:0 0;
-  pointer-events:none;
-}
+===headline===
+8 to 13 words. A claim with content, not a label.
 
-.lab{ font-weight:600; letter-spacing:.24em; text-transform:uppercase; color:var(--muted); }
-.disp{ font-weight:700; letter-spacing:-.035em; line-height:.86; color:var(--ink); }
-.say{ font-weight:400; letter-spacing:-.012em; color:var(--ink); }
-.mark{ font-weight:700; letter-spacing:.26em; text-transform:uppercase; color:var(--ink); }
-.hair{ background:var(--ink); height:2px; }
-.rail{ position:absolute; display:flex; gap:7px; align-items:center; }
-.rail i{ display:block; height:3px; width:16px; background:var(--rule); }
-.rail i.on{ background:var(--ink); width:38px; }
+===standfirst===
+Two sentences. What happened and what it means for positioning.
 
-/* full-bleed ranked bars: the bar IS the row, the label sits on it */
-.rank{ margin:0; }
-.rankrow{ position:relative; display:flex; align-items:center; margin-bottom:6px; }
-/* the wash carries the magnitude, the solid cap gives the row a clean end */
-.rankbar{ height:100%; position:absolute; left:0; top:0; }
-.rankbar.pos{ background:rgba(18,104,74,.10); border-right:4px solid var(--pos); }
-.rankbar.neg{ background:rgba(156,42,34,.09); border-right:4px solid var(--neg); }
-.rankbar.nil{ background:rgba(0,0,0,.05); border-right:4px solid var(--muted); }
-.rankrow .nm{ position:relative; z-index:2; font-weight:500; }
-.rankrow .vl{ position:relative; z-index:2; margin-left:auto; font-weight:700; }
+===takeaways===
+Four one-sentence conclusions, ordered by importance. One per line.
 
-/* stacked figure list, no table chrome */
-.ledger{ border-top:2px solid var(--ink); }
-.ledger .row{ display:flex; align-items:baseline; border-bottom:1px solid var(--rule); }
-.slide.ink .ledger{ border-top-color:#FFFFFF; }
-.slide.ink .ledger .row{ border-bottom-color:#2E2E2E; }
-.ledger .nm{ font-weight:500; }
-.ledger .px{ margin-left:auto; color:var(--muted); }
-.slide.ink .ledger .px{ color:#8A8A8A; }
-.ledger .dl{ font-weight:700; text-align:right; }
+===desk_view===
+Two paragraphs. What the session confirms or contradicts, and the level that
+decides it. This is the most important section: write it in full.
 
-/* ---------------------------------------------------- LinkedIn 1200 x 1500 */
-.li .slide{ width:1200px; height:1500px; }
-.li .pad{ padding:84px 88px; }
-.li .lab{ font-size:19px; }
-.li .disp{ font-size:120px; }
-.li .disp.xl{ font-size:196px; }
-.li .say{ font-size:44px; line-height:1.28; }
-.li .say.sm{ font-size:33px; line-height:1.40; }
-.li .head{ font-size:66px; font-weight:700; letter-spacing:-.028em; line-height:1.06; }
-.li .mark{ font-size:30px; }
-.li .band{ top:880px; height:620px; }
-.li .rankrow{ height:62px; font-size:27px; }
-.li .rankrow .nm{ padding-left:18px; }
-.li .rankrow .vl{ padding-right:18px; }
-.li .ledger .row{ padding:19px 0; font-size:30px; }
-.li .ledger .dl{ min-width:180px; }
-.li .rail{ left:88px; bottom:64px; }
+===watching===
+Four concrete catalysts for the next session. One per line.
 
-/* ------------------------------------------------------ TikTok 1080 x 1920 */
-.tt .slide{ width:1080px; height:1920px; }
-.tt .pad{ padding:132px 76px 116px 76px; }
-.tt .lab{ font-size:23px; }
-.tt .disp{ font-size:150px; }
-.tt .disp.xl{ font-size:238px; }
-.tt .say{ font-size:56px; line-height:1.26; }
-.tt .say.sm{ font-size:40px; line-height:1.38; }
-.tt .head{ font-size:82px; font-weight:700; letter-spacing:-.030em; line-height:1.05; }
-.tt .mark{ font-size:36px; }
-.tt .band{ top:1150px; height:770px; }
-.tt .rankrow{ height:74px; font-size:33px; }
-.tt .rankrow .nm{ padding-left:20px; }
-.tt .rankrow .vl{ padding-right:20px; }
-.tt .ledger .row{ padding:24px 0; font-size:38px; }
-.tt .ledger .dl{ min-width:210px; }
-.tt .rail{ left:76px; bottom:62px; }
+===equities===
+Two paragraphs: indices, sector rotation, breadth, dispersion.
+
+===rates===
+Two paragraphs: curve, shift, breakevens, auctions.
+
+===credit===
+One paragraph: spreads, primary market, tone of credit.
+
+===fx===
+One paragraph: dollar, G10 crosses, EM bloc.
+
+===commodities===
+One paragraph: energy, precious, industrial, ags.
+
+===volatility===
+One paragraph: the vol surface and the cost of protection.
+
+===digital===
+One paragraph: digital assets and their beta to risk.
+
+===international===
+One paragraph: European and Asian closes and what they hand New York.
+
+===correlation===
+Two paragraphs on cross-asset correlation and what a break in it would mean.
+
+===linkedin===
+LinkedIn caption, 900 to 1300 characters. Plain text. Open with the most
+informative sentence of the day, no throat-clearing. Short paragraphs separated
+by a blank line. No hashtags, no emoji, no markdown, no sign-off. End on the
+level or condition that would change the read.
+
+===tiktok===
+Spoken script for a 7-slide photo carousel, 60 to 90 words total. Same voice,
+shorter sentences. No hype.
+"""
+
+
+@dataclass
+class Note:
+    content: dict
+    audit_ok: bool = True
+    unsupported: list[str] = field(default_factory=list)
+    attempts: int = 1
+
+
+_NUM = re.compile(r"[-+]?\d{1,3}(?:,\d{3})*(?:\.\d+)?|[-+]?\d+(?:\.\d+)?")
+
+
+def _permitted(facts: dict) -> set[float]:
+    vals: set[float] = set()
+
+    def walk(o):
+        if isinstance(o, dict):
+            [walk(v) for v in o.values()]
+        elif isinstance(o, list):
+            [walk(v) for v in o]
+        elif isinstance(o, (int, float)) and not isinstance(o, bool):
+            v = float(o)
+            vals.update({round(v, 2), round(abs(v), 2), round(v, 1), round(v, 0)})
+    walk(facts)
+    vals |= {float(x) for x in range(0, 101)}
+    vals |= {1900.0 + i for i in range(220)}
+    return vals
+
+
+def _figures(text: str) -> list[float]:
+    out = []
+    for m in _NUM.findall(text):
+        try:
+            out.append(float(m.replace(",", "")))
+        except ValueError:
+            pass
+    return out
+
+
+def audit(content: dict, facts: dict) -> list[str]:
+    allowed = _permitted(facts)
+    text = " ".join(v if isinstance(v, str) else " ".join(map(str, v))
+                    for v in content.values())
+    bad = []
+    for n in _figures(text):
+        if any(abs(n - p) <= max(TOLERANCE, abs(p) * TOLERANCE) for p in allowed):
+            continue
+        bad.append(f"{n:g}")
+    return sorted(set(bad))
+
+
+MAX_TOKENS = int(os.getenv("ANDRA_MAX_TOKENS", "16000"))
+
+FIELDS = ("headline", "standfirst", "takeaways", "equities", "rates", "credit",
+          "fx", "commodities", "volatility", "digital", "international",
+          "correlation", "desk_view", "watching", "linkedin", "tiktok")
+LIST_FIELDS = ("takeaways", "watching")
+
+
+_TAG = re.compile(r"^\s*=+\s*(\w+)\s*=+\s*$", re.M)
+
+
+def parse_reply(txt: str) -> dict:
+    """Split a tagged reply into sections. Never raises on shape alone."""
+    txt = re.sub(r"```[a-z]*", "", txt).strip()
+    marks = list(_TAG.finditer(txt))
+    if not marks:
+        raise ValueError(f"no section tags in reply ({len(txt)} chars): "
+                         f"{txt[:300]!r}")
+
+    out: dict = {}
+    for i, m in enumerate(marks):
+        name = m.group(1).strip().lower()
+        if name not in FIELDS:
+            continue
+        stop = marks[i + 1].start() if i + 1 < len(marks) else len(txt)
+        body = txt[m.end():stop].strip()
+        if not body:
+            continue
+        if name in LIST_FIELDS:
+            items = [re.sub(r"^\s*(?:[-*\u2022]|\d+[.)])\s*", "", ln).strip()
+                     for ln in body.splitlines() if ln.strip()]
+            out[name] = [i for i in items if i]
+        else:
+            out[name] = re.sub(r"\n{3,}", "\n\n", body)
+
+    if not out:
+        raise ValueError(f"tags found but every section was empty: {txt[:300]!r}")
+    missing = [f for f in FIELDS if f not in out]
+    if missing:
+        log.warning("Reply is missing %d section(s): %s", len(missing),
+                    ", ".join(missing))
+    return out
+
+
+def _call(client, messages: list[dict]) -> dict:
+    r = client.messages.create(model=MODEL, max_tokens=MAX_TOKENS,
+                               system=SYSTEM, messages=messages)
+
+    txt = "".join(getattr(b, "text", "") for b in r.content
+                  if b.type == "text").strip()
+    if not txt:
+        kinds = [b.type for b in r.content]
+        raise ValueError(f"reply carried no text (blocks: {kinds}, "
+                         f"stop: {r.stop_reason}).")
+    if r.stop_reason == "max_tokens":
+        log.warning("Reply hit the token ceiling and may be truncated. "
+                    "Raise ANDRA_MAX_TOKENS above %d.", MAX_TOKENS)
+    if os.getenv("ANDRA_DEBUG_REPLY"):
+        log.info("Raw reply, first 600 chars: %r", txt[:600])
+    return parse_reply(txt)
+
+
+def _complete(content: dict) -> dict:
+    """Fill any gap so the templates never hit a missing key."""
+    for f in FIELDS:
+        content.setdefault(f, [] if f in LIST_FIELDS else "")
+    if not content.get("headline"):
+        content["headline"] = "Market close"
+    return content
+
+
+def _as_tagged(content: dict) -> str:
+    """Render a parsed note back into tagged format for the retry turn."""
+    parts = []
+    for f in FIELDS:
+        v = content.get(f)
+        if not v:
+            continue
+        body = "\n".join(v) if isinstance(v, list) else v
+        parts.append(f"==={f}===\n{body}")
+    return "\n\n".join(parts)
+
+
+def write(facts: dict, max_attempts: int = 3) -> Note:
+    from anthropic import Anthropic
+    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    prompt = (f"{SCHEMA}\n\nVerified fact pack for the session. This is the only "
+              f"admissible source of figures:\n\n"
+              f"{json.dumps(facts, ensure_ascii=False, default=str)}")
+    messages = [{"role": "user", "content": prompt}]
+
+    content, bad, last_error = {}, [], None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            content = _call(client, messages)
+        except Exception as e:  # noqa: BLE001
+            last_error = e
+            log.warning("Attempt %d failed to produce a usable reply: %s", attempt, e)
+            continue
+
+        bad = audit(content, facts)
+        if not bad:
+            return Note(_complete(content), True, [], attempt)
+
+        log.warning("Audit %d rejected figures: %s", attempt, bad)
+        messages += [
+            {"role": "assistant", "content": _as_tagged(content)},
+            {"role": "user", "content":
+                f"The figure check rejected these because they are not in the "
+                f"fact pack: {bad}. Return the full note again with those "
+                f"removed or replaced by the correct value from the pack. Do "
+                f"not introduce any new figure."},
+        ]
+
+    if content:
+        return Note(_complete(content), False, bad, max_attempts)
+    raise RuntimeError(f"no usable reply after {max_attempts} attempts: {last_error}")
+
+
+def write_without_model(facts: dict) -> Note:
+    """Degraded mode. Tables and exhibits ship, prose does not."""
+    b = facts.get("risk_barometer", {})
+    blank = {k: "" for k in ("equities", "rates", "credit", "fx", "commodities",
+                             "volatility", "digital", "international",
+                             "correlation", "desk_view", "linkedin", "tiktok")}
+    return Note({
+        "headline": "Market close: quantitative read of the session",
+        "standfirst": ("Published in quantitative mode. Editorial commentary is "
+                       "unavailable in this edition; tables and exhibits reflect "
+                       "the official close."),
+        "takeaways": [f"Cross-asset risk score at {b.get('score')} ({b.get('label')})."],
+        "watching": [], **blank,
+    }, audit_ok=True)
