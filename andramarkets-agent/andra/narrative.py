@@ -180,7 +180,7 @@ def audit(content: dict, facts: dict) -> list[str]:
     return sorted(set(bad))
 
 
-MAX_TOKENS = int(os.getenv("ANDRA_MAX_TOKENS", "8000"))
+MAX_TOKENS = int(os.getenv("ANDRA_MAX_TOKENS", "16000"))
 
 # Fields the note needs. Anything missing after parsing is salvaged by regex
 # rather than throwing the whole reply away.
@@ -233,35 +233,17 @@ def parse_reply(txt: str) -> dict:
 
 
 def _call(client, messages: list[dict]) -> dict:
-    # Writing a note from an already-computed fact pack does not need extended
-    # thinking, and leaving it on is what drained the token budget in
-    # production: the model spent its whole allowance reasoning and never wrote
-    # the note. Turn thinking off explicitly and fall back cleanly on any SDK
-    # or model that will not accept the parameter.
-    kwargs = dict(model=MODEL, max_tokens=MAX_TOKENS, system=SYSTEM,
-                  messages=messages, temperature=0.4,
-                  thinking={"type": "disabled"})
-    try:
-        r = client.messages.create(**kwargs)
-    except TypeError:
-        kwargs.pop("thinking", None)
-        r = client.messages.create(**kwargs)
-    except Exception as e:  # noqa: BLE001
-        if "thinking" in str(e).lower():
-            kwargs.pop("thinking", None)
-            r = client.messages.create(**kwargs)
-        else:
-            raise
+    # Plain call, exactly as the working version: no thinking parameter, no
+    # temperature, a sensible token ceiling. This is what produced a full note.
+    r = client.messages.create(model=MODEL, max_tokens=MAX_TOKENS,
+                               system=SYSTEM, messages=messages)
 
     txt = "".join(getattr(b, "text", "") for b in r.content
                   if b.type == "text").strip()
     if not txt:
         kinds = [b.type for b in r.content]
-        hint = (f" The model used its whole budget before writing. "
-                f"Raise ANDRA_MAX_TOKENS above {MAX_TOKENS}."
-                if r.stop_reason == "max_tokens" else "")
         raise ValueError(f"reply carried no text (blocks: {kinds}, "
-                         f"stop: {r.stop_reason}).{hint}")
+                         f"stop: {r.stop_reason}).")
     if r.stop_reason == "max_tokens":
         log.warning("Reply hit the token ceiling and may be truncated. "
                     "Raise ANDRA_MAX_TOKENS above %d.", MAX_TOKENS)
