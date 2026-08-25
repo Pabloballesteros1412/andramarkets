@@ -1,11 +1,6 @@
-/* ==========================================================================
-   ANDRA MARKETS — Global Markets Research
-   Print stylesheet, daily market close.
-
-   Constraints: no blue anywhere. Colour is reserved for data. Structure is
-   carried by weight, rules and whitespace. Grotesque sans throughout.
-   No justified text, no drop caps, no running prose columns.
-   ========================================================================== */
+/* ANDRA MARKETS - Global Markets Research - print stylesheet.
+   No blue anywhere. Colour is reserved for data. Grotesque sans throughout.
+   No justified text, no drop caps, no running prose columns. */
 :root{
   --ink:#0E0E0E; --text:#2B2B2B; --muted:#767676; --faint:#A6A6A6;
   --rule:#D2D2D2; --soft:#EBEBEB; --panel:#F5F5F5; --paper:#FFFFFF;
@@ -21,12 +16,13 @@ html,body{
   letter-spacing:-.002em; font-variant-numeric:tabular-nums lining-nums;
   -webkit-font-feature-settings:"tnum" 1,"kern" 1; text-rendering:geometricPrecision;
 }
-.page{
-  background:var(--paper);
-}
-/* Content flows continuously. Whole sections are kept off page breaks so
-   nothing splits mid-block, but no page is padded with empty space. */
-.section{ break-inside:avoid; }
+.page{ background:var(--paper); }
+/* Content flows continuously. Whole sections stay off page breaks so nothing
+   splits mid-block, but no page is padded with empty space. */
+.section{ margin-top:4mm; break-inside:avoid; }
+.section.first{ margin-top:5mm; }
+.sec-head{ break-after:avoid; }
+figure, table, .panel, .stat, .takeaways li{ break-inside:avoid; }
 
 .rule-top{ height:1.7pt; background:var(--ink); margin-bottom:2.6mm; }
 .runhead{ display:flex; align-items:baseline; justify-content:space-between;
@@ -43,10 +39,6 @@ h1{ font-size:20pt; font-weight:700; line-height:1.16; letter-spacing:-.022em;
 .byline{ display:flex; justify-content:space-between; font-size:6.1pt; letter-spacing:.14em;
   text-transform:uppercase; color:var(--faint); border-top:.4pt solid var(--soft); padding-top:2mm; }
 
-.section{ margin-top:4mm; break-inside:avoid; }
-.sec-head{ break-after:avoid; }
-figure, table, .panel, .stat, .takeaways li{ break-inside:avoid; }
-.section.first{ margin-top:5mm; }
 .sec-head{ display:flex; align-items:baseline; gap:3.2mm; border-bottom:.9pt solid var(--ink);
   padding-bottom:1.5mm; margin-bottom:3.2mm; }
 .sec-num{ font-size:6.4pt; font-weight:700; color:var(--faint); }
@@ -114,4 +106,88 @@ figure img{ width:100%; display:block; }
 .cal{ font-size:7.2pt; }
 .cal-row{ display:grid; grid-template-columns:14mm 1fr 22mm 22mm; gap:2mm; padding:1.3mm 0;
   border-bottom:.3pt solid var(--soft); }
-.cal-row span:nth-child(3),.cal-row span:nth-child(4){
+.cal-row span:nth-child(3),.cal-row span:nth-child(4){ text-align:right; }
+.cal-row .t{ font-weight:600; color:var(--ink); font-size:6.6pt; }
+.cal-head{ font-size:5.9pt; font-weight:600; letter-spacing:.11em; text-transform:uppercase;
+  color:var(--muted); border-bottom:.8pt solid var(--ink); }
+
+.foot{ margin-top:6mm; padding-top:2.4mm; border-top:.4pt solid var(--rule); display:flex;
+  justify-content:space-between; font-size:5.7pt; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); }
+.legal{ font-size:5.9pt; line-height:1.52; color:var(--muted); border-top:.8pt solid var(--ink);
+  padding-top:2.4mm; margin-top:4mm; }
+.legal b{ color:var(--ink); font-weight:600; }
+
+/* SOCIAL CAROUSELS - art direction, not a shrunken report. */
+.slide{ position:relative; overflow:hidden; background:var(--paper);
+  page-break-after:always; display:block; }
+.slide:last-child{ page-break-after:auto; }
+.slide.ink{ background:var(--ink); color:#CFCFCF; }
+.slide.ink .lab{ color:#8A8A8A; }
+.slide.ink .disp, .slide.ink .say, .slide.ink .mark{ color:#FFFFFF; }
+.slide.ink .hair{ background:#2E2E2E; }
+.slide.ink .rail i{ background:#3A3A3A; }
+.slide.ink .rail i.on{ background:#FFFFFF; }
+
+.band{ position:absolute; left:0; right:0; background-repeat:no-repeat;
+  background-position:0 0; pointer-events:none; }
+
+.lab{ font-weight:600; letter-spacing:.24em; text-transform:uppercase; color:var(--muted); }
+.disp{ font-weight:700; letter-spacing:-.035em; line-height:.86; color:var(--ink); }
+.say{ font-weight:400; letter-spacing:-.012em; color:var(--ink); }
+.mark{ font-weight:700; letter-spacing:.26em; text-transform:uppercase; color:var(--ink); }
+.hair{ background:var(--ink); height:2px; }
+.rail{ position:absolute; display:flex; gap:7px; align-items:center; }
+.rail i{ display:block; height:3px; width:16px; background:var(--rule); }
+.rail i.on{ background:var(--ink); width:38px; }
+
+.rank{ margin:0; }
+.rankrow{ position:relative; display:flex; align-items:center; margin-bottom:6px; }
+.rankbar{ height:100%; position:absolute; left:0; top:0; }
+.rankbar.pos{ background:rgba(18,104,74,.10); border-right:4px solid var(--pos); }
+.rankbar.neg{ background:rgba(156,42,34,.09); border-right:4px solid var(--neg); }
+.rankbar.nil{ background:rgba(0,0,0,.05); border-right:4px solid var(--muted); }
+.rankrow .nm{ position:relative; z-index:2; font-weight:500; }
+.rankrow .vl{ position:relative; z-index:2; margin-left:auto; font-weight:700; }
+
+.ledger{ border-top:2px solid var(--ink); }
+.ledger .row{ display:flex; align-items:baseline; border-bottom:1px solid var(--rule); }
+.slide.ink .ledger{ border-top-color:#FFFFFF; }
+.slide.ink .ledger .row{ border-bottom-color:#2E2E2E; }
+.ledger .nm{ font-weight:500; }
+.ledger .px{ margin-left:auto; color:var(--muted); }
+.slide.ink .ledger .px{ color:#8A8A8A; }
+.ledger .dl{ font-weight:700; text-align:right; }
+
+.li .slide{ width:1200px; height:1500px; }
+.li .pad{ padding:84px 88px; }
+.li .lab{ font-size:19px; }
+.li .disp{ font-size:120px; }
+.li .disp.xl{ font-size:196px; }
+.li .say{ font-size:44px; line-height:1.28; }
+.li .say.sm{ font-size:33px; line-height:1.40; }
+.li .head{ font-size:66px; font-weight:700; letter-spacing:-.028em; line-height:1.06; }
+.li .mark{ font-size:30px; }
+.li .band{ top:880px; height:620px; }
+.li .rankrow{ height:62px; font-size:27px; }
+.li .rankrow .nm{ padding-left:18px; }
+.li .rankrow .vl{ padding-right:18px; }
+.li .ledger .row{ padding:19px 0; font-size:30px; }
+.li .ledger .dl{ min-width:180px; }
+.li .rail{ left:88px; bottom:64px; }
+
+.tt .slide{ width:1080px; height:1920px; }
+.tt .pad{ padding:132px 76px 116px 76px; }
+.tt .lab{ font-size:23px; }
+.tt .disp{ font-size:150px; }
+.tt .disp.xl{ font-size:238px; }
+.tt .say{ font-size:56px; line-height:1.26; }
+.tt .say.sm{ font-size:40px; line-height:1.38; }
+.tt .head{ font-size:82px; font-weight:700; letter-spacing:-.030em; line-height:1.05; }
+.tt .mark{ font-size:36px; }
+.tt .band{ top:1150px; height:770px; }
+.tt .rankrow{ height:74px; font-size:33px; }
+.tt .rankrow .nm{ padding-left:20px; }
+.tt .rankrow .vl{ padding-right:20px; }
+.tt .ledger .row{ padding:24px 0; font-size:38px; }
+.tt .ledger .dl{ min-width:210px; }
+.tt .rail{ left:76px; bottom:62px; }
