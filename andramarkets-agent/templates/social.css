@@ -1,5 +1,5 @@
 /* ==========================================================================
-   ANDRA MARKETS — social frames.
+   ANDRA MARKETS - social frames.
 
    Deliberately NOT the research note shrunk down. No tables, no repeated
    skeleton, no boxed charts. Every frame is one of six archetypes and no two
@@ -79,7 +79,7 @@ body{
 .mark{ font-weight:700; letter-spacing:.26em; text-transform:uppercase; }
 .stack{ margin-top:auto; }
 
-/* ============================ LINKEDIN · 1200 x 1500 ===================== */
+/* ============================ LINKEDIN 1200 x 1500 ====================== */
 .li .f{ width:1200px; height:1500px; padding:80px; }
 .li .rh{ font-size:19px; }
 .li .pg{ font-size:18px; bottom:74px; right:80px; }
@@ -98,8 +98,8 @@ body{
 .li .tenors span{ font-size:20px; }
 .li .mark{ font-size:40px; }
 
-/* ============================= TIKTOK · 1080 x 1920 ====================== */
-.tt .f{ width:1080px; height:1920px; padding:96px 78px; }
+/* ============================= TIKTOK 1080 x 1440 ====================== */
+.tt .f{ width:1080px; height:1440px; padding:80px 78px; }
 .tt .rh{ font-size:23px; }
 .tt .pg{ font-size:22px; bottom:88px; right:78px; }
 .tt .dsp{ font-size:104px; }
