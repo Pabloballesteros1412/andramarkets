@@ -61,6 +61,17 @@ def _edition() -> int:
     return n
 
 
+def _ny_now() -> dt.datetime:
+    """Current time in New York, where the session Andra reports on closes."""
+    try:
+        from zoneinfo import ZoneInfo
+        return dt.datetime.now(ZoneInfo("America/New_York"))
+    except Exception:  # noqa: BLE001
+        # Fallback if tz data is unavailable: assume the runner is on UTC and
+        # subtract a fixed offset. Coarse, but keeps the date on the US side.
+        return dt.datetime.utcnow() - dt.timedelta(hours=5)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--date")
@@ -70,8 +81,23 @@ def main() -> int:
     ap.add_argument("--half-day", action="store_true", dest="half")
     args = ap.parse_args()
 
-    date = dt.date.fromisoformat(args.date) if args.date else dt.date.today()
+    # The reporting date is the New York calendar date, not the runner's UTC
+    # date. At 20:20 UTC the US session has just closed and it is still the same
+    # day in New York, so this pins the note to the session that actually ended
+    # rather than to yesterday's close.
+    ny = _ny_now()
+    date = dt.date.fromisoformat(args.date) if args.date else ny.date()
+
     if not args.force and not args.demo:
+        # Publish only after the 4:00 pm ET close has settled. The workflow
+        # declares two crons to cover both DST offsets; whichever one fires
+        # outside the 16:15 to 17:30 New York window exits here, so exactly one
+        # note goes out per session instead of two.
+        if not (16 <= ny.hour < 18 or (ny.hour == 16 and ny.minute >= 15)):
+            log.info("Outside the publish window (New York time %s). "
+                     "This run does not publish; the correct cron will.",
+                     ny.strftime("%H:%M"))
+            return 0
         if not _traded(date):
             log.info("NYSE did not trade on %s. Nothing published.", date)
             return 0
