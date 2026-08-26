@@ -7,7 +7,7 @@ millimetre grid) without leaving Python.
 Three deliverables per session:
   · A4 research note, 5 pages
   · LinkedIn document carousel, 8 pages at 1200 x 1500
-  · TikTok photo carousel, 7 PNG stills at 1080 x 1920
+  · TikTok photo carousel, 7 PNG stills at 1080 x 1440
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def f_chg(v, unit="px"):
 def f_bp(v):
     if v is None or v != v:
         return "n/a"
-    return f"{'+' if v >= 0 else '−'}{f_num(abs(v), 1)} bp"
+    return f"{'+' if v >= 0 else '\u2212'}{f_num(abs(v), 1)} bp"
 
 
 def f_lvl(v, dec=2, unit="px"):
@@ -152,7 +152,7 @@ def build_exhibits(mf, tmp: str) -> dict[str, str]:
     # --- social art: one continuous line per carousel, plus the bare curve ---
     if "spx" in mf.px.columns:
         path = mf.series("spx", 260).values
-        for tag, w, h in (("tt", 7 * 1080, 770), ("li", 8 * 1200, 620)):
+        for tag, w, h in (("tt", 7 * 1080, 600), ("li", 8 * 1200, 620)):
             ex[f"ribbon_{tag}_dark"] = _b64(charts.ribbon(
                 path, p(f"rb_{tag}_d"), w, h, colour=charts.INK))
             ex[f"ribbon_{tag}_light"] = _b64(charts.ribbon(
@@ -312,7 +312,7 @@ def build_context(mf, note, ex, calendar=None, edition=1, social_tmp=None) -> di
         "sector_rows": _sector_rows(mf),
         "ribbon": {"dark": ex.get("ribbon_tt_dark", ""),
                    "light": ex.get("ribbon_tt_light", ""),
-                   "width": 7 * 1080, "height": 770},
+                   "width": 7 * 1080, "height": 600},
         "ribbon_li": {"dark": ex.get("ribbon_li_dark", ""),
                       "light": ex.get("ribbon_li_light", ""),
                       "width": 8 * 1200, "height": 620},
@@ -358,14 +358,14 @@ def linkedin_pdf(ctx: dict, out: str) -> str:
 
 
 def tiktok_images(ctx: dict, out_dir: str, stem: str) -> list[str]:
-    """TikTok takes stills, not documents. One PNG per slide, 1080 x 1920."""
+    """TikTok takes stills, not documents. One PNG per slide, 1080 x 1440."""
     from playwright.sync_api import sync_playwright
     html = _env().get_template("tiktok.html.j2").render(**ctx)
     os.makedirs(out_dir, exist_ok=True)
     paths = []
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
-        page = browser.new_page(viewport={"width": 1080, "height": 1920},
+        page = browser.new_page(viewport={"width": 1080, "height": 1440},
                                 device_scale_factor=1)
         page.set_content(html, wait_until="load")
         for i, el in enumerate(page.query_selector_all(".f"), start=1):
