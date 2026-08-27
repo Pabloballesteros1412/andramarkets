@@ -20,10 +20,10 @@ INK, GRAPHITE, SLATE, MIST = "#0E0E0E", "#2B2B2B", "#767676", "#A6A6A6"
 RULE, PAPER, PANEL, ACCENT = "#D2D2D2", "#FFFFFF", "#F5F5F5", "#12684A"
 UP, DOWN, FLAT = "#12684A", "#9C2A22", "#767676"
 
-# Serie cualitativa (5 líneas máximo por exhibit). Cero azul.
+# Serie cualitativa (5 lineas maximo por exhibit). Cero azul.
 QUAL = [INK, "#8A8A8A", "#12684A", "#B8B8B8", "#5A5A5A"]
 
-# Rampa divergente oxblood → hueso → verde bosque (sustituye a RdBu)
+# Rampa divergente oxblood a hueso a verde bosque (sustituye a RdBu)
 DIVERGING = [
     "#8E2018", "#AE5148", "#CB8880", "#E5BFBA", "#FFFFFF",
     "#C6D8CD", "#8FB6A2", "#4E8E70", "#12684A",
@@ -72,7 +72,7 @@ def _save(fig, path: str) -> str:
 # ============================================================== EXHIBITS ====
 def line_rebased(series: dict[str, Sequence[float]], x: Sequence,
                  path: str, size=(6.6, 2.5), base_label="Rebased to 100") -> str:
-    """Comportamiento relativo rebasado a 100 (índices, regiones, factores)."""
+    """Comportamiento relativo rebasado a 100 (indices, regiones, factores)."""
     fig, ax = plt.subplots(figsize=size)
     finales = []
     for i, (name, y) in enumerate(series.items()):
@@ -81,7 +81,6 @@ def line_rebased(series: dict[str, Sequence[float]], x: Sequence,
         ax.plot(x, y, color=QUAL[i % len(QUAL)], lw=1.15, zorder=3, label=name)
         finales.append([y[-1], name, QUAL[i % len(QUAL)]])
 
-    # Separación vertical de etiquetas para evitar solapes en el margen derecho
     finales.sort(key=lambda r: r[0])
     vals = [f[0] for f in finales]
     minimo = (max(vals) - min(vals) or 1) * 0.085
@@ -146,13 +145,13 @@ def yield_curve(tenors: Sequence[str], today: Sequence[float],
     ax.set_xticks(x); ax.set_xticklabels(tenors)
     ax.set_ylim(min(min(today), min(prior)) - 0.12, max(max(today), max(prior)) + 0.20)
     ax.legend(loc="lower right", ncol=1)
-    _finish(ax, "%  ·  etiqueta = Δ pb")
+    _finish(ax, "%  ·  etiqueta = delta pb")
     return _save(fig, path)
 
 
 def area_vol(x: Sequence, y: Sequence[float], path: str, size=(3.2, 2.0),
-             ylab="Índice") -> str:
-    """Serie de volatilidad con relleno y banda de media móvil."""
+             ylab="Indice") -> str:
+    """Serie de volatilidad con relleno y banda de media movil."""
     y = np.asarray(y, dtype=float)
     fig, ax = plt.subplots(figsize=size)
     ax.fill_between(range(len(y)), y.min() * 0.94, y, color=PANEL, zorder=2)
@@ -177,7 +176,7 @@ def area_vol(x: Sequence, y: Sequence[float], path: str, size=(3.2, 2.0),
 def heat_matrix(rows: Sequence[str], cols: Sequence[str],
                 data: Iterable[Iterable[float]], path: str,
                 size=(6.6, 1.9), unit="%") -> str:
-    """Matriz de rendimientos (activo × horizonte) en rampa oxblood→verde."""
+    """Matriz de rendimientos (activo x horizonte) en rampa oxblood a verde."""
     from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
     m = np.asarray(list(data), dtype=float)
     cmap = LinearSegmentedColormap.from_list("andra_div", DIVERGING)
@@ -208,7 +207,7 @@ def heat_matrix(rows: Sequence[str], cols: Sequence[str],
 def dual_axis(x: Sequence, izq: tuple[str, Sequence[float]],
               der: tuple[str, Sequence[float]], path: str,
               size=(3.15, 2.05)) -> str:
-    """Dos series en ejes independientes (tipo real frente a implícita)."""
+    """Dos series en ejes independientes (tipo real frente a implicita)."""
     fig, ax = plt.subplots(figsize=size)
     ax2 = ax.twinx()
     ax.plot(range(len(izq[1])), izq[1], color=INK, lw=1.25, zorder=3)
@@ -229,7 +228,7 @@ def dual_axis(x: Sequence, izq: tuple[str, Sequence[float]],
 
 
 def corr_matrix(labels: Sequence[str], m, path: str, size=(3.15, 2.75)) -> str:
-    """Correlación de rendimientos diarios. Triángulo inferior, sin azul."""
+    """Correlacion de rendimientos diarios. Triangulo inferior, sin azul."""
     from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
     m = np.asarray(m, dtype=float)
     mask = np.triu(np.ones_like(m, dtype=bool), k=1)
@@ -280,7 +279,7 @@ def breadth_bar(adv: int, dec: int, unch: int, path: str, size=(3.15, 0.62)) -> 
 
 def dumbbell(labels: Sequence[str], start: Sequence[float], end: Sequence[float],
              path: str, size=(3.15, 2.6), unit="pb") -> str:
-    """Comparativa nivel previo vs nivel actual (spreads de crédito, primas)."""
+    """Comparativa nivel previo vs nivel actual (spreads de credito, primas)."""
     y = np.arange(len(labels))
     fig, ax = plt.subplots(figsize=size)
     for i, (s, e) in enumerate(zip(start, end)):
@@ -368,7 +367,8 @@ def social_spark(y, path: str, size=(13, 3.4), color: str = INK,
     fig, ax = plt.subplots(figsize=size)
     x = np.arange(len(y))
     if fill:
-        ax.fill_between(x, y.min() - (float(np.ptp(y)) or 1) * .35, y, color=fill, lw=0)
+        ax.fill_between(x, y.min() - (float(np.ptp(y)) or 1) * .40, y,
+                        color=fill, lw=0, alpha=0.16)
     ax.plot(x, y, color=color, lw=lw, solid_capstyle="round", zorder=3)
     ax.scatter([x[-1]], [y[-1]], s=lw * 26, color=color, zorder=4)
     ax.set_xlim(0, len(y) - 1)
