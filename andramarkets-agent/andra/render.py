@@ -236,6 +236,14 @@ def _social_pack(mf, note, tmp: str, hero: dict) -> dict:
             tail, p("mark_l"), size=(4.2, .85), color="#FFFFFF", lw=3.4))
         pack["mark_dark"] = _b64(charts.social_spark(
             tail, p("mark_d"), size=(4.2, .85), color=charts.INK, lw=3.4))
+        # Clean session line with a soft fill, to cover the empty lower half of
+        # the statement slides (the number and the pull-quotes) with the day's
+        # own price action rather than blank space. No axes, no labels.
+        full = mf.series("spx", 60).values
+        pack["sketch_light"] = _b64(charts.social_spark(
+            full, p("sk_l"), size=(12, 3.0), color="#FFFFFF", lw=4.0, fill="#FFFFFF", crop=True))
+        pack["sketch_dark"] = _b64(charts.social_spark(
+            full, p("sk_d"), size=(12, 3.0), color=charts.INK, lw=4.0, fill=charts.INK, crop=True))
 
     c = mf.block("curve")
     if not c.empty:
