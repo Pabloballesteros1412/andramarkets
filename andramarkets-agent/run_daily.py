@@ -88,25 +88,23 @@ def main() -> int:
     ny = _ny_now()
     date = dt.date.fromisoformat(args.date) if args.date else ny.date()
 
-    if not args.force and not args.demo:
-        # Publish only after the 4:00 pm ET close has settled. The workflow
-        # declares two crons to cover both DST offsets; whichever one fires
-        # outside the 16:15 to 17:30 New York window exits here, so exactly one
-        # note goes out per session instead of two.
-        if not (16 <= ny.hour < 18 or (ny.hour == 16 and ny.minute >= 15)):
-            log.info("Outside the publish window (New York time %s). "
-                     "This run does not publish; the correct cron will.",
-                     ny.strftime("%H:%M"))
-            return 0
-        if not _traded(date):
-            log.info("NYSE did not trade on %s. Nothing published.", date)
-            return 0
-        if args.half and not _early_close(date):
-            log.info("Full session: the half-day window does not publish.")
-            return 0
-        if not args.half and _early_close(date):
-            log.info("Early close: the note went out in the 1:00 pm ET window.")
-            return 0
+if not args.force and not args.demo:
+        # BYPASS TEMPORAL DE PRUEBA: Comentado para ignorar restricciones de horario y mercado
+        # if not (16 <= ny.hour < 18 or (ny.hour == 16 and ny.minute >= 15)):
+        #     log.info("Outside the publish window (New York time %s). "
+        #              "This run does not publish; the correct cron will.",
+        #              ny.strftime("%H:%M"))
+        #     return 0
+        # if not _traded(date):
+        #     log.info("NYSE did not trade on %s. Nothing published.", date)
+        #     return 0
+        # if args.half and not _early_close(date):
+        #     log.info("Full session: the half-day window does not publish.")
+        #     return 0
+        # if not args.half and _early_close(date):
+        #     log.info("Early close: the note went out in the 1:00 pm ET window.")
+        #     return 0
+        pass
 
     OUT.mkdir(exist_ok=True)
 
