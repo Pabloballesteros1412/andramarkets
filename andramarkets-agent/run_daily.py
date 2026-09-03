@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 """Andra Markets close agent.
 
@@ -6,10 +5,25 @@
     python run_daily.py --no-mail      builds only
     python run_daily.py --demo         synthetic fixture, no API calls
     python run_daily.py --date 2026-08-19
+    python run_daily.py --force        skip every gate, publish right now
 
-Scheduling: runs at 16:20 New York time, twenty minutes after the bell, so the
-closing auction has settled and vendors have consolidated the official close.
-If the NYSE did not trade, the run exits without publishing.
+Scheduling: two crons cover the summer and winter UTC offset for the 4:00 pm
+ET close. Both may fire close together, and GitHub's free scheduler can also
+delay a run by hours. Neither should ever produce two emails or a report
+mislabelled with the wrong date, so this file makes both mistakes structurally
+impossible instead of relying on hitting an exact time of day:
+
+  1. SESSION   The date reported on is worked out from the current New York
+               time, not copied from it. Before the close, "today" has not
+               finished yet, so the correct session is the last one that has.
+  2. DEDUP     A marker file records the last session actually emailed. Any
+               run for a session already marked exits without doing anything,
+               so a second cron firing minutes later, or a wildly delayed one
+               firing the next morning, cannot send a duplicate.
+
+The marker is committed back to the repository by the workflow after a
+successful run, so it survives between the fresh checkouts each run starts
+from.
 """
 from __future__ import annotations
 
@@ -73,6 +87,36 @@ def _ny_now() -> dt.datetime:
         return dt.datetime.utcnow() - dt.timedelta(hours=5)
 
 
+def _session_date(ny: dt.datetime) -> dt.date:
+    """Which trading session this run should report on.
+
+    Before the 4:00 pm ET close, today's session has not finished, so the
+    right answer is the previous business day, not today. A run that fires
+    at 1am New York time because GitHub delayed it overnight still resolves
+    to the correct, already-closed session instead of mislabelling stale data
+    as today's close.
+    """
+    d = ny.date()
+    if ny.hour < 16:
+        d -= dt.timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= dt.timedelta(days=1)
+    return d
+
+
+def _marker() -> Path:
+    return ROOT / ".last_published"
+
+
+def _already_published(date: dt.date) -> bool:
+    f = _marker()
+    return f.exists() and f.read_text().strip() == date.isoformat()
+
+
+def _mark_published(date: dt.date) -> None:
+    _marker().write_text(date.isoformat())
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--date")
@@ -82,12 +126,30 @@ def main() -> int:
     ap.add_argument("--half-day", action="store_true", dest="half")
     args = ap.parse_args()
 
-    # The reporting date is the New York calendar date, not the runner's UTC
-    # date. At 20:20 UTC the US session has just closed and it is still the same
-    # day in New York, so this pins the note to the session that actually ended
-    # rather than to yesterday's close.
     ny = _ny_now()
-    date = dt.date.fromisoformat(args.date) if args.date else ny.date()
+
+    if args.force or args.demo:
+        # Manual and demo runs bypass every gate below: they use the date
+        # given, or the current New York date if none was given, and are
+        # never recorded in the dedup marker so they can never suppress a
+        # later scheduled run.
+        date = dt.date.fromisoformat(args.date) if args.date else ny.date()
+    else:
+        date = dt.date.fromisoformat(args.date) if args.date else _session_date(ny)
+
+        if _already_published(date):
+            log.info("Already published the %s session. Skipping to avoid "
+                     "sending a second email for the same close.", date)
+            return 0
+        if not _traded(date):
+            log.info("NYSE did not trade on %s. Nothing published.", date)
+            return 0
+        if args.half and not _early_close(date):
+            log.info("Full session: the half-day window does not publish.")
+            return 0
+        if not args.half and _early_close(date):
+            log.info("Early close: the note went out in the 1:00 pm ET window.")
+            return 0
 
     OUT.mkdir(exist_ok=True)
 
@@ -157,6 +219,9 @@ def main() -> int:
     send(li, tt, script, checks, [carousel, report, *stills], ctx,
          note.audit_ok, len(mf.missing), len(stills))
     log.info("Delivered to %s", os.environ["MAIL_TO"])
+
+    if not args.force:
+        _mark_published(date)
     return 0
 
 
