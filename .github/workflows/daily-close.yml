@@ -6,6 +6,9 @@ on:
     - cron: "20 21 * * 1-5"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -35,7 +38,17 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
-        run: python run_daily.py
+        run: python run_daily.py ${{ github.event_name == 'workflow_dispatch' && '--force' || '' }}
+
+      - name: Save publish state
+        if: always()
+        run: |
+          git config user.name "andra-bot"
+          git config user.email "actions@users.noreply.github.com"
+          [ -f .edition ] && git add .edition
+          [ -f .last_published ] && git add .last_published
+          git diff --cached --quiet || git commit -m "Update publish state [skip ci]"
+          git push
 
       - name: Archive the edition
         uses: actions/upload-artifact@v4
