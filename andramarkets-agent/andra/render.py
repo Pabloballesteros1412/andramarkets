@@ -5,9 +5,9 @@ editorial-grade typographic control (half-point rules, tabular figures, a
 millimetre grid) without leaving Python.
 
 Three deliverables per session:
-  · A4 research note, 5 pages
+  · A4 research note, PDF
   · LinkedIn document carousel, 8 pages at 1200 x 1500
-  · TikTok photo carousel, 7 PNG stills at 1080 x 1440
+  · The research note's own pages, rasterised one PNG per page
 """
 from __future__ import annotations
 
@@ -212,11 +212,12 @@ def _sector_rows(mf) -> list[dict]:
 
 
 def _social_pack(mf, note, tmp: str, hero: dict) -> dict:
-    """Everything the carousels need, shaped for type rather than for plots.
+    """Everything the LinkedIn carousel needs, shaped for type rather than
+    for plots.
 
-    Sector bars and the tape are handed over as widths and formatted strings so
-    the templates can set them in CSS. Only two pieces of line art get plotted,
-    both untitled: the labels live in the HTML.
+    Sector bars and the tape are handed over as widths and formatted strings
+    so the template can set them in CSS. Only line art gets plotted, and it
+    is untitled: the labels live in the HTML.
     """
     charts.house_style()
     p = lambda n: os.path.join(tmp, f"{n}.png")  # noqa: E731
@@ -365,20 +366,25 @@ def linkedin_pdf(ctx: dict, out: str) -> str:
     return _print_pdf(_env().get_template("linkedin.html.j2").render(**ctx), out)
 
 
-def tiktok_images(ctx: dict, out_dir: str, stem: str) -> list[str]:
-    """TikTok takes stills, not documents. One PNG per slide, 1080 x 1440."""
-    from playwright.sync_api import sync_playwright
-    html = _env().get_template("tiktok.html.j2").render(**ctx)
+def report_images(pdf_path: str, out_dir: str, stem: str, dpi: int = 200) -> list[str]:
+    """Each page of the research note PDF as its own PNG, at print quality.
+
+    The report's pages are not fixed-size blocks like the carousel frames:
+    the text flows and the PDF engine decides where each page breaks. So the
+    only reliable way to get one image per page is to render the PDF first,
+    the same one that already goes out as an attachment, and rasterise each
+    of its finished pages afterward.
+    """
+    import pymupdf
     os.makedirs(out_dir, exist_ok=True)
     paths = []
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page(viewport={"width": 1080, "height": 1440},
-                                device_scale_factor=1)
-        page.set_content(html, wait_until="load")
-        for i, el in enumerate(page.query_selector_all(".f"), start=1):
-            path = os.path.join(out_dir, f"{stem}_{i:02d}.png")
-            el.screenshot(path=path)
-            paths.append(path)
-        browser.close()
+    zoom = dpi / 72
+    mat = pymupdf.Matrix(zoom, zoom)
+    doc = pymupdf.open(pdf_path)
+    for i, page in enumerate(doc, start=1):
+        pix = page.get_pixmap(matrix=mat)
+        path = os.path.join(out_dir, f"{stem}_{i:02d}.png")
+        pix.save(path)
+        paths.append(path)
+    doc.close()
     return paths
