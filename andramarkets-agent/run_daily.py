@@ -18,9 +18,9 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from . import charts
-from .analytics import (breadth, cross_correlation, curve, horizon_matrix,
-                        movers, risk_barometer)
+import charts
+from analytics import (breadth, cross_correlation, curve, horizon_matrix,
+                       movers, risk_barometer)
 
 ROOT = Path(__file__).resolve().parent.parent
 TPL = ROOT / "templates"
