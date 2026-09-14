@@ -17,3 +17,4 @@ pypdf==5.1.0
 # --- optional ---
 # blpapi                  # Bloomberg terminal: global sovereigns and CDX
 # refinitiv-data          # Refinitiv alternative
+pymupdf
