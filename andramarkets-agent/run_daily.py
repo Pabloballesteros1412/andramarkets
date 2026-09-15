@@ -207,6 +207,8 @@ def main() -> int:
     (OUT / f"tiktok_caption_{stamp}.txt").write_text(f"{tt}\n\n---\n{script}", encoding="utf-8")
     (OUT / f"facts_{stamp}.json").write_text(
         json.dumps(facts, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    (OUT / f"note_{stamp}.json").write_text(
+        json.dumps(note.content, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     log.info("Caption: %d chars | figure in hook: %s | style flags: %s",
              checks["characters"], checks["hook_has_figure"],
              checks["style_flags"] or "none")
