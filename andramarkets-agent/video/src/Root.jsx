@@ -152,7 +152,7 @@ const Scene = ({data}) => {
         }}
       >
         <div style={{fontSize: 22, color: C.muted, fontWeight: 500}}>Cross-asset risk</div>
-        <div style={{fontFamily: GROTESK, fontWeight: 700, fontSize: 40, marginTop: 6, display: 'flex', alignItems: 'center', gap: 14}}>
+        <div style={{fontFamily: GROTESK, fontWeight: 700, fontSize: 40, marginTop: 6, display: 'flex', alignItems: 'center', gap: 14, color: riskColor}}>
           <span style={{color: riskColor, fontSize: 26}}>{(d.risk?.score ?? 0) >= 0 ? '\u25B2' : '\u25BC'}</span> {d.risk?.label}
         </div>
         <div style={{fontSize: 22, color: C.muted, marginTop: 4}}>score {signed(d.risk?.score ?? 0)}</div>
