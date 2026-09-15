@@ -17,17 +17,32 @@ const {fontFamily: GROTESK} = loadGrotesk('normal', {weights: ['500', '700'], su
 const C = {
   bg: '#0c0f14',
   line: '#3dd6ff',
-  alert: '#ff2a5f',
-  lime: '#b6ff5a',
+  up: '#b6ff5a',
+  down: '#ff2a5f',
   ink: '#eef2f8',
   muted: '#8a94a6',
   card: 'rgba(20,26,36,.72)',
   hair: 'rgba(255,255,255,.07)',
 };
 
-const Scene = () => {
+const SAMPLE = {
+  date: '2026-09-12',
+  headline: 'Risk appetite firms as the S&P grinds higher',
+  spx: {last: 5432.1, chg: 0.84},
+  risk: {score: 0.42, label: 'Constructive'},
+};
+
+const pct = (v) => `${v >= 0 ? '+' : '\u2212'}${Math.abs(v).toFixed(2)}%`;
+const signed = (v) => `${v >= 0 ? '+' : '\u2212'}${Math.abs(v).toFixed(2)}`;
+
+const Scene = ({data}) => {
+  const d = data || SAMPLE;
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
+
+  const up = (d.spx?.chg ?? 0) >= 0;
+  const moveColor = up ? C.up : C.down;
+  const riskColor = (d.risk?.score ?? 0) >= 0 ? C.up : C.down;
 
   const at = (a, b, from, to, ease) =>
     interpolate(frame, [a * fps, b * fps], [from, to], {
@@ -89,11 +104,11 @@ const Scene = () => {
       <div
         style={{
           position: 'absolute', top: '12.5%', left: '5%', right: '34%',
-          fontFamily: GROTESK, fontWeight: 700, lineHeight: 1.06, fontSize: 78,
+          fontFamily: GROTESK, fontWeight: 700, lineHeight: 1.08, fontSize: 74,
           color: C.ink, opacity: headO, transform: `translateY(${headY}px)`,
         }}
       >
-        Valuations hit <span style={{color: C.alert}}>cycle highs</span>
+        {d.headline}
       </div>
 
       <svg style={{position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible'}} viewBox="0 0 1920 1080" preserveAspectRatio="none">
@@ -114,33 +129,33 @@ const Scene = () => {
         <circle cx="1591" cy="259" r="11" fill="#fff" opacity={peakO} style={{filter: 'drop-shadow(0 0 14px #3dd6ff)'}} />
       </svg>
 
-      <div style={{position: 'absolute', left: '82.9%', top: '24%', width: 36, height: 36, marginLeft: -18, marginTop: -18, border: `3px solid ${C.alert}`, borderRadius: '50%', opacity: rippleO, transform: `scale(${rippleScale})`}} />
+      <div style={{position: 'absolute', left: '82.9%', top: '24%', width: 36, height: 36, marginLeft: -18, marginTop: -18, border: `3px solid ${moveColor}`, borderRadius: '50%', opacity: rippleO, transform: `scale(${rippleScale})`}} />
 
       <div
         style={{
           position: 'absolute', left: '84%', top: '20%', transform: `translate(-50%,-50%) scale(${badge})`,
-          background: C.alert, color: '#fff', fontFamily: GROTESK, fontWeight: 700, fontSize: 46,
-          padding: '14px 30px', borderRadius: 999, boxShadow: '0 0 40px rgba(255,42,95,.55)', whiteSpace: 'nowrap',
+          background: moveColor, color: '#0c0f14', fontFamily: GROTESK, fontWeight: 700, fontSize: 42,
+          padding: '12px 26px', borderRadius: 999, boxShadow: `0 0 40px ${moveColor}66`, whiteSpace: 'nowrap',
         }}
       >
-        6&times;
+        {pct(d.spx?.chg ?? 0)}
       </div>
       <div style={{position: 'absolute', left: '84%', top: '30%', transform: 'translateX(-50%)', fontSize: 24, color: C.muted, opacity: capO, whiteSpace: 'nowrap'}}>
-        vs. 25-year average
+        S&amp;P 500, session close
       </div>
 
       <div
         style={{
-          position: 'absolute', right: '5%', bottom: '9%', minWidth: 320,
+          position: 'absolute', right: '5%', bottom: '9%', minWidth: 340,
           background: C.card, border: `1px solid ${C.hair}`, borderRadius: 18, padding: '22px 26px',
           backdropFilter: 'blur(6px)', opacity: cardO, transform: `translateY(${cardY}px)`,
         }}
       >
-        <div style={{fontSize: 22, color: C.muted, fontWeight: 500}}>Risk index</div>
-        <div style={{fontFamily: GROTESK, fontWeight: 700, fontSize: 42, marginTop: 6, display: 'flex', alignItems: 'center', gap: 14}}>
-          <span style={{color: C.alert, fontSize: 28}}>&#9650;</span> Elevated
+        <div style={{fontSize: 22, color: C.muted, fontWeight: 500}}>Cross-asset risk</div>
+        <div style={{fontFamily: GROTESK, fontWeight: 700, fontSize: 40, marginTop: 6, display: 'flex', alignItems: 'center', gap: 14}}>
+          <span style={{color: riskColor, fontSize: 26}}>{(d.risk?.score ?? 0) >= 0 ? '\u25B2' : '\u25BC'}</span> {d.risk?.label}
         </div>
-        <div style={{fontSize: 22, color: C.lime, marginTop: 4}}>+18% week over week</div>
+        <div style={{fontSize: 22, color: C.muted, marginTop: 4}}>score {signed(d.risk?.score ?? 0)}</div>
       </div>
     </AbsoluteFill>
   );
@@ -155,6 +170,7 @@ export const RemotionRoot = () => {
       fps={30}
       width={1920}
       height={1080}
+      defaultProps={{data: SAMPLE}}
     />
   );
 };
