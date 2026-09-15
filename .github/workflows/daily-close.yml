@@ -52,3 +52,29 @@ jobs:
         with:
           name: andramarkets-${{ github.run_id }}
           path: andramarkets-agent/out/
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build video data
+        continue-on-error: true
+        run: python video/build_video_data.py
+
+      - name: Install video dependencies
+        continue-on-error: true
+        working-directory: andramarkets-agent/video
+        run: npm install
+
+      - name: Render video
+        continue-on-error: true
+        working-directory: andramarkets-agent/video
+        run: npx remotion render src/index.js DailyRecap out/video.mp4 --props="./video-data.json"
+
+      - name: Upload video
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: andra-video-${{ github.run_id }}
+          path: andramarkets-agent/video/out/video.mp4
