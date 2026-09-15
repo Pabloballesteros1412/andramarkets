@@ -209,6 +209,33 @@ def main() -> int:
         json.dumps(facts, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     (OUT / f"note_{stamp}.json").write_text(
         json.dumps(note.content, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    _series, _prev = [], None
+    try:
+        _prev = float(mf.snap.at["spx", "prev"])
+    except Exception:  # noqa: BLE001
+        _prev = None
+    if not args.demo:
+        try:
+            import yfinance as yf
+            _tkr = str(mf.snap.at["spx", "ticker"])
+            _intr = yf.download(_tkr, start=date, end=date + dt.timedelta(days=1),
+                                interval="5m", auto_adjust=False, progress=False,
+                                prepost=False)
+            if not _intr.empty:
+                _cl = _intr["Close"]
+                if hasattr(_cl, "columns"):
+                    _cl = _cl.iloc[:, 0]
+                _series = [round(float(x), 2) for x in _cl.dropna().tolist()]
+        except Exception as e:  # noqa: BLE001
+            log.warning("Intraday S&P fetch failed, using daily fallback: %s", e)
+    if len(_series) < 2:
+        try:
+            _series = [round(float(x), 2) for x in mf.series("spx", 60).tolist()]
+        except Exception:  # noqa: BLE001
+            _series = []
+    (OUT / f"series_{stamp}.json").write_text(
+        json.dumps({"series": _series, "prev_close": _prev},
+                   ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     log.info("Caption: %d chars | figure in hook: %s | style flags: %s",
              checks["characters"], checks["hook_has_figure"],
              checks["style_flags"] or "none")
