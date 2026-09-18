@@ -224,8 +224,27 @@ def parse_reply(txt: str) -> dict:
 
 
 def _call(client, messages: list[dict]) -> dict:
-    r = client.messages.create(model=MODEL, max_tokens=MAX_TOKENS,
-                               system=SYSTEM, messages=messages)
+    # Writing a note from an already-computed fact pack does not need the
+    # model to reason step by step, and leaving thinking at its default is
+    # what broke production twice: the model spent its entire token budget
+    # on a hidden reasoning block and returned no text at all, always with
+    # the same signature (blocks: ['thinking'], stop: max_tokens). Disabling
+    # it explicitly, rather than just omitting the parameter, is what fixed
+    # this the first time. The fallback keeps the call working if a future
+    # SDK or model rejects the parameter outright.
+    kwargs = dict(model=MODEL, max_tokens=MAX_TOKENS, system=SYSTEM,
+                  messages=messages, thinking={"type": "disabled"})
+    try:
+        r = client.messages.create(**kwargs)
+    except TypeError:
+        kwargs.pop("thinking", None)
+        r = client.messages.create(**kwargs)
+    except Exception as e:  # noqa: BLE001
+        if "thinking" in str(e).lower():
+            kwargs.pop("thinking", None)
+            r = client.messages.create(**kwargs)
+        else:
+            raise
 
     txt = "".join(getattr(b, "text", "") for b in r.content
                   if b.type == "text").strip()
