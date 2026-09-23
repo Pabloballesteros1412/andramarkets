@@ -58,19 +58,19 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Build video data
-        continue-on-error: true
-        run: python video/build_video_data.py
-
       - name: Install video dependencies
         continue-on-error: true
         working-directory: andramarkets-agent/video
         run: npm install
 
-      - name: Render video
+      - name: Build data and render video
         continue-on-error: true
         working-directory: andramarkets-agent/video
-        run: npx remotion render src/index.js DailyRecap out/video.mp4 --props="./video-data.json"
+        run: |
+          python build_video_data.py
+          echo "--- files in video dir ---"
+          ls -la
+          npx remotion render src/index.js DailyRecap out/video.mp4 --props="./video-data.json"
 
       - name: Upload video
         continue-on-error: true
