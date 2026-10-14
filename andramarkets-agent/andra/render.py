@@ -1,3 +1,84 @@
+"""Composition and output.
+
+Laid out in HTML/CSS and printed with headless Chromium. That is what buys
+editorial-grade typographic control (half-point rules, tabular figures, a
+millimetre grid) without leaving Python.
+
+Three deliverables per session:
+  - A4 research note, PDF
+  - LinkedIn document carousel, 8 pages at 1200 x 1500
+  - The research note's own pages, rasterised one PNG per page
+"""
+from __future__ import annotations
+
+import base64
+import datetime as dt
+import os
+from pathlib import Path
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+from . import charts
+from .analytics import (breadth, cross_correlation, curve, horizon_matrix,
+                        movers, risk_barometer)
+
+ROOT = Path(__file__).resolve().parent.parent
+TPL = ROOT / "templates"
+
+MINUS = "\u2212"
+
+
+# ------------------------------------------------------------ jinja filters
+def f_num(v, dec=2):
+    if v is None or v != v:
+        return "n/a"
+    return f"{float(v):,.{int(dec)}f}"
+
+
+def f_chg(v, unit="px"):
+    """Session or period change. Rates in basis points, everything else in %."""
+    if v is None or v != v:
+        return "n/a"
+    sign = "+" if v >= 0 else MINUS
+    if unit == "pct":
+        dec = 1 if abs(v) < 2 else 0
+        return f"{sign}{f_num(abs(v), dec)} bp"
+    return f"{sign}{f_num(abs(v), 2)}%"
+
+
+def f_bp(v):
+    if v is None or v != v:
+        return "n/a"
+    sign = "+" if v >= 0 else MINUS
+    return f"{sign}{f_num(abs(v), 1)} bp"
+
+
+def f_lvl(v, dec=2, unit="px"):
+    if v is None or v != v:
+        return "n/a"
+    return f"{f_num(v, 2)}%" if unit == "pct" else f_num(v, dec)
+
+
+def f_dir(v):
+    if v is None or v != v:
+        return "nil"
+    return "pos" if v > 0.005 else ("neg" if v < -0.005 else "nil")
+
+
+def _env() -> Environment:
+    env = Environment(loader=FileSystemLoader(str(TPL)),
+                      autoescape=select_autoescape(["html"]),
+                      trim_blocks=True, lstrip_blocks=True)
+    env.filters.update(num=f_num, chg=f_chg, bp=f_bp, lvl=f_lvl, dir=f_dir)
+    return env
+
+
+def _b64(path: str) -> str:
+    with open(path, "rb") as fh:
+        return "data:image/png;base64," + base64.b64encode(fh.read()).decode()
+
+
+# ----------------------------------------------------------------- exhibits
 def build_exhibits(mf, tmp: str) -> dict[str, str]:
     charts.house_style()
     ex: dict[str, str] = {}
@@ -96,3 +177,220 @@ def build_exhibits(mf, tmp: str) -> dict[str, str]:
     if rows:
         ex["heatmap"] = _b64(charts.heat_matrix(rows, cols, data, p("heat"), size=(7.6, 1.14)))
     return ex
+
+
+# ------------------------------------------------------------------ context
+def _curve_note(cur: dict) -> str:
+    shift = cur.get("shift") or {}
+    if not shift:
+        return "No computable curve shift this session."
+    names = {"ust2y": "the 2-year", "ust5y": "the 5-year",
+             "ust10y": "the 10-year", "ust30y": "the 30-year"}
+    mx = max(shift, key=lambda k: abs(shift[k]))
+    return (f"The curve saw a {cur.get('move_type', 'shift')}. "
+            f"{names.get(mx, mx).capitalize()} moved most at {f_bp(shift[mx])}. "
+            f"The spread between the largest and smallest move across the curve "
+            f"was {f_num(max(shift.values()) - min(shift.values()), 1)} bp.")
+
+
+def _hero(mf, bar: dict) -> dict:
+    """The one number the social posts lead with."""
+    spx = mf.get("spx", "chg")
+    if spx is not None:
+        return {"value": f_chg(spx), "label": "S&P 500, session close",
+                "note": f"Cross-asset risk score at {bar['score']:.2f}, "
+                        f"read as {bar['label'].lower()}."}
+    return {"value": f"{bar['score']:.2f}", "label": "Cross-asset risk score",
+            "note": bar["label"]}
+
+
+def _sector_rows(mf) -> list[dict]:
+    """Sector moves as full-bleed rows. The bar is the row, not a chart."""
+    d = mf.block("sectors")
+    if d.empty:
+        return []
+    d = d.sort_values("chg", ascending=False)
+    span = float(max(abs(d["chg"].max()), abs(d["chg"].min())) or 1)
+    return [{"name": r["name"], "value": f_chg(r["chg"]),
+             "dir": f_dir(r["chg"]),
+             "width": round(18 + 82 * abs(r["chg"]) / span, 1)}
+            for r in d.reset_index().to_dict("records")]
+
+
+def _social_pack(mf, note, tmp: str, hero: dict) -> dict:
+    """Everything the LinkedIn carousel needs, shaped for type rather than
+    for plots.
+
+    Sector bars and the tape are handed over as widths and formatted strings
+    so the template can set them in CSS. Only line art gets plotted, and it
+    is untitled: the labels live in the HTML.
+    """
+    charts.house_style()
+    p = lambda n: os.path.join(tmp, f"{n}.png")  # noqa: E731
+    pack: dict = {"hero": hero}
+
+    if "spx" in mf.px.columns:
+        y = mf.series("spx", 60).values
+        pack["spark_light"] = _b64(charts.social_spark(
+            y, p("spark_l"), size=(13, 3.3), color="#FFFFFF", lw=5.0))
+        pack["spark_dark"] = _b64(charts.social_spark(
+            y, p("spark_d"), size=(13, 3.3), color=charts.INK, lw=5.0))
+        # Ornament: the last twenty sessions of the S&P, used in place of a
+        # rule on the pull frames. The mark is different every day because the
+        # market is different every day.
+        tail = y[-20:]
+        pack["mark_light"] = _b64(charts.social_spark(
+            tail, p("mark_l"), size=(4.2, .85), color="#FFFFFF", lw=3.4))
+        pack["mark_dark"] = _b64(charts.social_spark(
+            tail, p("mark_d"), size=(4.2, .85), color=charts.INK, lw=3.4))
+        # Clean session line with a soft fill, to cover the empty lower half of
+        # the statement slides (the number and the pull-quotes) with the day's
+        # own price action rather than blank space. No axes, no labels.
+        full = mf.series("spx", 60).values
+        pack["sketch_light"] = _b64(charts.social_spark(
+            full, p("sk_l"), size=(12, 3.0), color="#FFFFFF", lw=4.0, fill="#FFFFFF", crop=True))
+        pack["sketch_dark"] = _b64(charts.social_spark(
+            full, p("sk_d"), size=(12, 3.0), color=charts.INK, lw=4.0, fill=charts.INK, crop=True))
+
+    c = mf.block("curve")
+    if not c.empty:
+        pack["curve_img"] = _b64(charts.social_curve(
+            c["last"].tolist(), p("curve_s"), size=(11, 3.6), color=charts.INK, lw=5.5))
+        pack["tenors"] = ["1M", "3M", "6M", "1Y", "2Y", "3Y", "5Y", "7Y",
+                          "10Y", "20Y", "30Y"][:len(c)]
+
+    sec = mf.block("sectors")
+    if not sec.empty:
+        peak = max(abs(float(v)) for v in sec["chg"]) or 1.0
+        pack["sectors"] = [
+            {"name": r["name"], "value": f_chg(r["chg"]),
+             "dir": "pos" if r["chg"] >= 0 else "neg",
+             "side": "left" if r["chg"] >= 0 else "right",
+             "width": round(abs(float(r["chg"])) / peak * 48, 1)}
+            for r in sec.sort_values("chg", ascending=False)
+                       .reset_index().to_dict("records")]
+
+    tape_keys = ["spx", "ndx", "rut", "ust10y", "dxy", "gold", "wti", "btc"]
+    pack["tape"] = [
+        {"name": str(mf.snap.at[k, "name"]),
+         "last": f_lvl(mf.snap.at[k, "last"], int(mf.snap.at[k, "dec"]),
+                       str(mf.snap.at[k, "unit"])),
+         "chg": f_chg(mf.snap.at[k, "chg"], str(mf.snap.at[k, "unit"])),
+         "dir": f_dir(mf.snap.at[k, "chg"])}
+        for k in tape_keys if k in mf.snap.index]
+
+    desk = (note.content.get("desk_view") or "").split("\n\n")
+    pack["desk_line"] = desk[0] if desk and desk[0] else note.content.get("standfirst", "")
+    return pack
+
+
+def build_context(mf, note, ex, calendar=None, edition=1, social_tmp=None) -> dict:
+    d = mf.asof
+    bar = risk_barometer(mf)
+    cur = curve(mf)
+
+    sec = mf.block("sectors")
+    if not sec.empty:
+        best, worst = sec.loc[sec["chg"].idxmax()], sec.loc[sec["chg"].idxmin()]
+        rotation = (f"{best['name']} led at {f_chg(best['chg'])} and "
+                    f"{worst['name']} finished last at {f_chg(worst['chg'])}, "
+                    f"a spread of {f_num(best['chg'] - worst['chg'], 2)} "
+                    f"percentage points between the two ends.")
+    else:
+        rotation = "No sector detail available in this edition."
+
+    snap = mf.snap.reset_index().to_dict("records") if not mf.snap.empty else []
+    fx, cmd = mf.rows("fx"), mf.rows("commodities")
+
+    hero = _hero(mf, bar)
+    hero["dir"] = f_dir(mf.get("spx", "chg"))
+
+    return {
+        "css": (TPL / "styles.css").read_text(encoding="utf-8"),
+        "social_css": (TPL / "social.css").read_text(encoding="utf-8"),
+        "s": _social_pack(mf, note, social_tmp or ".", hero),
+        "n": note.content,
+        "audit_ok": note.audit_ok,
+        "date_long": d.strftime("%B %-d, %Y"),
+        "date_short": d.strftime("%d %b %Y"),
+        "published": dt.datetime.now().strftime("%H:%M CET"),
+        "edition": edition if isinstance(edition, str) else f"{edition:04d}",
+        "pages": 5,
+        "barometer": bar,
+        "breadth": breadth(mf),
+        "movers": movers(mf),
+        "slopes": [{"name": k, "bp": v["bp"], "delta": v["delta"]}
+                   for k, v in cur.items() if isinstance(v, dict) and "bp" in v],
+        "curve_note": _curve_note(cur),
+        "rotation": rotation,
+        "hero": hero,
+        "sector_rows": _sector_rows(mf),
+        "ribbon": {"dark": ex.get("ribbon_tt_dark", ""),
+                   "light": ex.get("ribbon_tt_light", ""),
+                   "width": 7 * 1080, "height": 600},
+        "ribbon_li": {"dark": ex.get("ribbon_li_dark", ""),
+                      "light": ex.get("ribbon_li_light", ""),
+                      "width": 8 * 1200, "height": 620},
+        "calendar": calendar or [],
+        "missing_series": len(mf.missing),
+        "stale_series": len(getattr(mf, "stale", [])),
+        "ex": ex,
+        "t": {
+            "summary_equity": [r for r in snap if r.get("summary") == "equity"],
+            "summary_macro": [r for r in snap if r.get("summary") == "macro"],
+            "us_equity": mf.rows("us_equity"),
+            "europe": mf.rows("europe")[:8], "apac": mf.rows("apac")[:8],
+            "americas": mf.rows("americas")[:5],
+            "curve": mf.rows("curve"), "breakevens": mf.rows("breakevens"),
+            "sovereigns": mf.rows("sovereigns"), "credit": mf.rows("credit"),
+            "fx": fx, "fx_top": fx[:6],
+            "commodities": cmd, "commodities_top": cmd[:6],
+            "volatility": mf.rows("volatility"), "digital": mf.rows("digital"),
+        },
+    }
+
+
+# ---------------------------------------------------------------- rendering
+def _print_pdf(html: str, out: str, css_page: bool = True, **kw) -> str:
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page()
+        page.set_content(html, wait_until="load")
+        page.emulate_media(media="print")
+        page.pdf(path=out, print_background=True, prefer_css_page_size=css_page,
+                 margin={"top": "0", "bottom": "0", "left": "0", "right": "0"}, **kw)
+        browser.close()
+    return out
+
+
+def report_pdf(ctx: dict, out: str) -> str:
+    return _print_pdf(_env().get_template("report.html.j2").render(**ctx), out, format="A4")
+
+
+def linkedin_pdf(ctx: dict, out: str) -> str:
+    return _print_pdf(_env().get_template("linkedin.html.j2").render(**ctx), out)
+
+
+def report_images(pdf_path: str, out_dir: str, stem: str, dpi: int = 200) -> list[str]:
+    """Each page of the research note PDF as its own PNG, at print quality.
+
+    The report's pages are not fixed-size blocks like the carousel frames:
+    the text flows and the PDF engine decides where each page breaks. So the
+    only reliable way to get one image per page is to render the PDF first,
+    the same one that already goes out as an attachment, and rasterise each
+    of its finished pages afterward.
+    """
+    import pymupdf
+    os.makedirs(out_dir, exist_ok=True)
+    paths = []
+    zoom = dpi / 72
+    mat = pymupdf.Matrix(zoom, zoom)
+    doc = pymupdf.open(pdf_path)
+    for i, page in enumerate(doc, start=1):
+        pix = page.get_pixmap(matrix=mat)
+        path = os.path.join(out_dir, f"{stem}_{i:02d}.png")
+        pix.save(path)
+        paths.append(path)
+    doc.close()
+    return paths
