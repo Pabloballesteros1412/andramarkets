@@ -8,6 +8,11 @@ on:
     - cron: "30 20 * * 1-5"
     - cron: "30 21 * * 1-5"
   workflow_dispatch:
+    inputs:
+      resend:
+        description: Send again even if this session's note was already sent
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -20,6 +25,9 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      # Read by run_daily.py as --force: skips only the dedup gate.
+      ANDRA_RESEND: ${{ inputs.resend || false }}
     defaults:
       run:
         working-directory: andramarkets-agent

@@ -4,8 +4,8 @@
     python run_daily.py                live data, builds and emails
     python run_daily.py --no-mail      builds only
     python run_daily.py --demo         synthetic fixture, no API calls
-    python run_daily.py --date 2026-08-19
-    python run_daily.py --force        skip every gate, publish right now
+    python run_daily.py --date 2026-08-19   a past session, checked against NYSE
+    python run_daily.py --force        send again even if the session was sent
 
 Scheduling: two crons cover the summer and winter UTC offset for the 4:00 pm
 ET close. Both may fire close together, and GitHub's free scheduler can also
@@ -14,8 +14,12 @@ mislabelled with the wrong date, so this file makes both mistakes structurally
 impossible instead of relying on hitting an exact time of day:
 
   1. SESSION   The date reported on is worked out from the current New York
-               time, not copied from it. Before the close, "today" has not
-               finished yet, so the correct session is the last one that has.
+               time, not copied from it: the last NYSE session that closed at
+               least fifteen minutes ago (andra/session.py). Before 4:15 pm
+               ET, on a weekend or on a holiday, that is the previous
+               session. A --date that is not a finished session stops the
+               run, so no note is ever dated in the future or on a day NYSE
+               did not trade.
   2. DEDUP     A marker file records the last session actually emailed. Any
                run for a session already marked exits without doing anything,
                so a second cron firing minutes later, or a wildly delayed one
@@ -38,6 +42,8 @@ from pathlib import Path
 
 from andra import render
 from andra.analytics import fact_pack
+from andra.session import (SessionError, check_requested, last_completed,
+                           last_completed_weekday)
 
 logging.basicConfig(level=logging.INFO, datefmt="%H:%M:%S",
                     format="%(asctime)s  %(levelname)-7s %(name)s | %(message)s")
@@ -45,28 +51,6 @@ log = logging.getLogger("andra")
 
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "out"
-
-
-def _traded(date: dt.date) -> bool:
-    if date.weekday() >= 5:
-        return False
-    try:
-        import pandas_market_calendars as mcal
-        return not mcal.get_calendar("NYSE").schedule(start_date=date, end_date=date).empty
-    except ImportError:
-        log.warning("pandas_market_calendars not installed: weekend filter only.")
-        return True
-
-
-def _early_close(date: dt.date) -> bool:
-    try:
-        import pandas_market_calendars as mcal
-        sch = mcal.get_calendar("NYSE").schedule(start_date=date, end_date=date)
-        if sch.empty:
-            return False
-        return sch.iloc[0]["market_close"].tz_convert("America/New_York").hour < 15
-    except ImportError:
-        return False
 
 
 def _edition() -> int:
@@ -87,23 +71,6 @@ def _ny_now() -> dt.datetime:
         return dt.datetime.utcnow() - dt.timedelta(hours=5)
 
 
-def _session_date(ny: dt.datetime) -> dt.date:
-    """Which trading session this run should report on.
-
-    Before the 4:00 pm ET close, today's session has not finished, so the
-    right answer is the previous business day, not today. A run that fires
-    at 1am New York time because GitHub delayed it overnight still resolves
-    to the correct, already-closed session instead of mislabelling stale data
-    as today's close.
-    """
-    d = ny.date()
-    if ny.hour < 16:
-        d -= dt.timedelta(days=1)
-    while d.weekday() >= 5:
-        d -= dt.timedelta(days=1)
-    return d
-
-
 def _marker() -> Path:
     return ROOT / ".last_published"
 
@@ -122,34 +89,43 @@ def main() -> int:
     ap.add_argument("--date")
     ap.add_argument("--demo", action="store_true")
     ap.add_argument("--no-mail", action="store_true")
-    ap.add_argument("--force", action="store_true")
+    ap.add_argument("--force", action="store_true",
+                    default=os.getenv("ANDRA_RESEND", "").lower() == "true",
+                    help="send even if this session was already sent "
+                         "(also set by ANDRA_RESEND=true)")
+    # Kept so the crontab's 1:20 pm ET line still parses. Half days need no
+    # flag: the session cut-off follows each day's actual close.
     ap.add_argument("--half-day", action="store_true", dest="half")
     args = ap.parse_args()
 
     ny = _ny_now()
 
-    if args.force or args.demo:
-        # Manual and demo runs bypass every gate below: they use the date
-        # given, or the current New York date if none was given, and are
-        # never recorded in the dedup marker so they can never suppress a
-        # later scheduled run.
-        date = dt.date.fromisoformat(args.date) if args.date else ny.date()
-    else:
-        date = dt.date.fromisoformat(args.date) if args.date else _session_date(ny)
+    # The date is never today's date by default, and never one NYSE did not
+    # trade on, whatever flags are given.
+    try:
+        if args.date:
+            date = dt.date.fromisoformat(args.date)
+            if not args.demo:
+                check_requested(date, ny)
+        elif args.demo:
+            try:
+                date = last_completed(ny)
+            except SessionError:
+                date = last_completed_weekday(ny)
+        else:
+            date = last_completed(ny)
+    except SessionError as e:
+        log.error("Not publishing: %s", e)
+        return 1
+    log.info("Reporting on the %s session (New York time %s).",
+             date, ny.strftime("%Y-%m-%d %H:%M"))
 
-        if _already_published(date):
-            log.info("Already published the %s session. Skipping to avoid "
-                     "sending a second email for the same close.", date)
-            return 0
-        if not _traded(date):
-            log.info("NYSE did not trade on %s. Nothing published.", date)
-            return 0
-        if args.half and not _early_close(date):
-            log.info("Full session: the half-day window does not publish.")
-            return 0
-        if not args.half and _early_close(date):
-            log.info("Early close: the note went out in the 1:00 pm ET window.")
-            return 0
+    # Forced and demo runs skip only the dedup gate, and are never recorded
+    # in the marker, so they can never suppress a later scheduled run.
+    if not (args.force or args.demo) and _already_published(date):
+        log.info("Already published the %s session. Skipping to avoid "
+                 "sending a second email for the same close.", date)
+        return 0
 
     OUT.mkdir(exist_ok=True)
 
