@@ -165,6 +165,7 @@ def main() -> int:
 
     # 2 · Writing
     facts = fact_pack(mf)
+    mode = "model"
     if args.demo:
         from demo_fixture import demo_note
         note = demo_note()
@@ -177,6 +178,7 @@ def main() -> int:
             # diagnose a writer failure from a CI log.
             log.exception("Writer unavailable. Publishing in quantitative mode.")
             note = write_without_model(facts)
+            mode = "quantitative"
         else:
             filled = sum(1 for v in note.content.values() if v)
             log.info("Note written: %d of %d sections filled.",
@@ -186,10 +188,11 @@ def main() -> int:
 
     # 3 · Composition
     stamp = date.strftime("%Y%m%d")
+    edition = _edition()
     with tempfile.TemporaryDirectory() as tmp:
         ex = render.build_exhibits(mf, tmp)
         ctx = render.build_context(mf, note, ex, calendar=_calendar(),
-                                 edition=_edition(), social_tmp=tmp)
+                                 edition=edition, social_tmp=tmp)
         report = str(OUT / f"AndraMarkets_Close_{stamp}.pdf")
         carousel = str(OUT / f"AndraMarkets_LinkedIn_{stamp}.pdf")
         render.report_pdf(ctx, report)
@@ -209,6 +212,13 @@ def main() -> int:
         json.dumps(facts, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     (OUT / f"note_{stamp}.json").write_text(
         json.dumps(note.content, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    # What was only visible inside the PDF and the email subject: whether the
+    # figure check passed, what it rejected, and how the note was written.
+    (OUT / f"manifest_{stamp}.json").write_text(json.dumps({
+        "date": date.isoformat(), "edition": edition,
+        "audit_ok": note.audit_ok, "unsupported": note.unsupported,
+        "attempts": note.attempts, "mode": mode, "demo": bool(args.demo),
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
     _series, _prev = [], None
     try:
         _prev = float(mf.snap.at["spx", "prev"])

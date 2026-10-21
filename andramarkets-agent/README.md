@@ -13,6 +13,7 @@ Per run:
 | `linkedin_caption_YYYYMMDD.txt` | Caption, ready to paste |
 | `tiktok_caption_YYYYMMDD.txt` | Caption plus voiceover script |
 | `facts_YYYYMMDD.json` | Verified fact pack. Traceability and archive |
+| `manifest_YYYYMMDD.json` | Edition, figure check result and rejected figures, writing mode |
 
 ---
 
@@ -42,9 +43,12 @@ authenticate over SMTP.
 mkdir -p logs && crontab deploy/crontab.txt
 ```
 
-Also included: `deploy/Dockerfile` and `.github/workflows/daily-close.yml`.
-Actions schedules in UTC, so both DST windows are declared and the script
-discards the one that does not apply.
+Also included: `deploy/Dockerfile` and `.github/workflows/daily-close.yml`,
+which runs on its own every weekday at 20:30 and 21:30 UTC (4:30 pm ET in
+summer and in winter). Actions schedules in UTC, so both DST windows are
+declared: the firing that comes before the close, or after the note went
+out, finds the session already sent and stops without emailing. Run workflow
+still works by hand; tick resend to send a session again.
 
 ---
 

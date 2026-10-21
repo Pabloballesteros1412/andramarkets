@@ -1,10 +1,21 @@
 name: Daily market close
 
 on:
+  # 4:30 pm ET in summer (20:30 UTC) and in winter (21:30 UTC). Both fire
+  # every weekday; the run that comes before the close, or after the note
+  # went out, finds the session already sent and stops without emailing.
+  schedule:
+    - cron: "30 20 * * 1-5"
+    - cron: "30 21 * * 1-5"
   workflow_dispatch:
 
 permissions:
   contents: write
+
+# One run at a time, so two firings never race on the publish marker.
+concurrency:
+  group: daily-close
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -35,7 +46,7 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
-        run: python run_daily.py --force
+        run: python run_daily.py
 
       - name: Save publish state
         if: always()
