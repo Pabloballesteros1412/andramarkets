@@ -152,7 +152,8 @@ _NUM = re.compile(r"(?<![\d.])(?:(?<!\d)[-+])?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+
 # the fact pack happened to sit within 2% of 500.
 _ALIASES = ("MidCap 400", "Midcap 400", "S&P 400", "S&P 600", "SmallCap 600",
             "Nasdaq-100", "Russell 1000", "Russell 3000", "Euro Stoxx 50",
-            "Stoxx 50", "Stoxx 600", "FTSE 250", "Dow 30")
+            "Stoxx 50", "Stoxx 600", "FTSE 250", "Dow 30", "CSI 300",
+            "Nikkei 225", "ASX 200", "Hang Seng 50")
 _NAMES = re.compile("|".join(
     r"(?<![\w&])" + re.escape(n).replace(r"\ ", r"[\s-]") + r"(?!\w)"
     for n in sorted({i.name for i in all_instruments() if re.search(r"\d", i.name)}
