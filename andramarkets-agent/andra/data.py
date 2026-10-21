@@ -6,7 +6,10 @@ anything downstream.
 
 Output contract, always the same:
     MarketFrame.px    closing prices, dates x key
-    MarketFrame.snap  one row per instrument: last, chg, w1, m1, m3, ytd, z
+    MarketFrame.snap  one row per instrument: last, chg, w1, m1, m3, ytd, z,
+                      and the instrument's own print: date (its session date,
+                      in its exchange's time zone) and time (ISO timestamp,
+                      when the provider reports it)
 
 No module downstream ever sees a vendor symbol, only the key.
 """
@@ -15,6 +18,8 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import os
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field as dc_field
 
 import numpy as np
@@ -53,16 +58,68 @@ class MarketFrame:
         return self.px[key].dropna().tail(n)
 
 
-def _yahoo(instrs: list[Instrument], start: dt.date, end: dt.date) -> pd.DataFrame:
+def _yahoo_one(ins: Instrument, start: dt.date, end: dt.date):
+    """One ticker's daily closes, indexed by its own exchange's session date.
+
+    Yahoo leaves the close of the latest daily bar empty for a while after
+    many non-US markets have closed (Nikkei, Hang Seng, Euro Stoxx): the
+    official close sits only in the chart metadata, as regularMarketPrice at
+    regularMarketTime. Read without it, those markets look as if they had not
+    printed. The metadata close fills that bar, and its timestamp is kept as
+    the print time whenever it is the bar's close.
+    """
     import yfinance as yf
-    tickers = [i.ticker for i in instrs]
-    raw = yf.download(tickers, start=start, end=end + dt.timedelta(days=1),
-                      auto_adjust=False, progress=False, threads=True)
-    close = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else \
-        raw[["Close"]].rename(columns={"Close": tickers[0]})
-    mapping = {i.ticker: i.key for i in instrs}
-    close = close.rename(columns=mapping)
-    return close.loc[:, [c for c in close.columns if c in mapping.values()]]
+    t = yf.Ticker(ins.ticker)
+    h = t.history(start=start, end=end + dt.timedelta(days=1), interval="1d",
+                  auto_adjust=False)
+    if h is None or h.empty:
+        return None, None
+    s = h["Close"].astype(float)
+    if s.index.tz is not None:
+        s.index = s.index.tz_localize(None)
+    s.index = s.index.normalize()
+    s = s[~s.index.duplicated(keep="last")]
+
+    meta = t.history_metadata or {}
+    price, when, tz = (meta.get("regularMarketPrice"), meta.get("regularMarketTime"),
+                       meta.get("exchangeTimezoneName"))
+    stamp = None
+    if price is not None and when and tz:
+        ts = pd.Timestamp(when, unit="s", tz="UTC").tz_convert(tz)
+        day = ts.tz_localize(None).normalize()
+        if start <= day.date() <= end and pd.isna(s.get(day)):
+            s.loc[day] = float(price)
+            s = s.sort_index()
+        last = s.dropna()
+        if (not last.empty and last.index[-1] == day
+                and abs(last.iloc[-1] - price) <= 1e-6 * max(1.0, abs(price))):
+            stamp = ts.isoformat()
+    return s, stamp
+
+
+def _yahoo(instrs: list[Instrument], start: dt.date, end: dt.date) -> pd.DataFrame:
+    def one(ins):
+        try:
+            return ins.key, _yahoo_one(ins, start, end)
+        except Exception as e:  # noqa: BLE001
+            log.warning("Yahoo %s failed: %s", ins.ticker, e)
+            return ins.key, (None, None)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        got = dict(pool.map(one, instrs))
+        # Yahoo drops the odd request (a 404 or a rate limit) for a ticker
+        # that is fine a second later: ask once more for anything empty.
+        again = [i for i in instrs if got[i.key][0] is None]
+        if again:
+            time.sleep(2)
+            got.update(pool.map(one, again))
+            still = [i.ticker for i in again if got[i.key][0] is None]
+            log.info("Yahoo retry: %d of %d recovered.%s", len(again) - len(still),
+                     len(again), f" Still empty: {', '.join(still)}" if still else "")
+    out = pd.DataFrame({k: s for k, (s, _) in got.items()
+                        if s is not None and s.notna().any()})
+    out.attrs["times"] = {k: t for k, (_, t) in got.items() if t}
+    return out
 
 
 def _fred(instrs: list[Instrument], start: dt.date, end: dt.date) -> pd.DataFrame:
@@ -99,7 +156,7 @@ def load(asof: dt.date | None = None) -> MarketFrame:
     asof = asof or dt.date.today()
     start = asof - dt.timedelta(days=WINDOW_DAYS)
 
-    frames = []
+    frames, times = [], {}
     for src, fn in PROVIDERS.items():
         instrs = [i for i in all_instruments() if i.src == src]
         if not instrs:
@@ -108,6 +165,7 @@ def load(asof: dt.date | None = None) -> MarketFrame:
             df = fn(instrs, start, asof)
             if not df.empty:
                 frames.append(df)
+                times.update(df.attrs.get("times", {}))
         except Exception as e:  # noqa: BLE001
             log.error("Provider %s failed outright: %s", src, e)
 
@@ -133,7 +191,7 @@ def load(asof: dt.date | None = None) -> MarketFrame:
     if missing:
         log.warning("No print for %d series: %s", len(missing), ", ".join(missing[:12]))
 
-    snap = snapshot(raw)
+    snap = snapshot(raw, times)
     stale = _stale(raw, asof)
     if stale:
         log.warning("%d series had no print for %s and are quoted at their last "
@@ -157,8 +215,10 @@ def _ret(s: pd.Series, n: int) -> float:
     return np.nan if len(s) <= n else 100.0 * (s.iloc[-1] / s.iloc[-1 - n] - 1.0)
 
 
-def snapshot(px: pd.DataFrame) -> pd.DataFrame:
+def snapshot(px: pd.DataFrame, times: dict[str, str] | None = None) -> pd.DataFrame:
+    """Per-instrument snapshot. `times` maps key -> ISO time of the last print."""
     meta = {i.key: i for i in all_instruments()}
+    times = times or {}
     rows = []
     for key in px.columns:
         s = px[key].dropna()
@@ -186,5 +246,8 @@ def snapshot(px: pd.DataFrame) -> pd.DataFrame:
             "ytd": (last - float(ytd_base.iloc[0])) * 100 if is_rate and not ytd_base.empty else ytd_px,
             "z": z,
             "high52": float(s.tail(252).max()), "low52": float(s.tail(252).min()),
+            # The instrument's own last print, never the run's date.
+            "date": s.index[-1].date().isoformat(),
+            "time": times.get(key),
         })
     return pd.DataFrame(rows).set_index("key") if rows else pd.DataFrame()
