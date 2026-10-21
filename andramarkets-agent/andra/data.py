@@ -70,15 +70,28 @@ def _fred(instrs: list[Instrument], start: dt.date, end: dt.date) -> pd.DataFram
     if not key:
         log.warning("FRED_API_KEY not set: skipping the Treasury curve block.")
         return pd.DataFrame()
+    import time
+
     from fredapi import Fred
     fred = Fred(api_key=key)
     out = {}
-    for i in instrs:
-        try:
-            out[i.key] = fred.get_series(i.ticker, observation_start=start,
-                                         observation_end=end)
-        except Exception as e:  # noqa: BLE001
-            log.warning("FRED %s failed: %s", i.ticker, e)
+    # FRED sometimes answers with an empty or HTML body for a few seconds
+    # ("syntax error: line 1, column 0" on every series on 21 Oct 2026).
+    # Anything that fails is asked for once more after a pause.
+    todo = list(instrs)
+    for attempt in (1, 2):
+        failed = []
+        for i in todo:
+            try:
+                out[i.key] = fred.get_series(i.ticker, observation_start=start,
+                                             observation_end=end)
+            except Exception as e:  # noqa: BLE001
+                log.warning("FRED %s failed (attempt %d): %s", i.ticker, attempt, e)
+                failed.append(i)
+        if not failed or attempt == 2:
+            break
+        time.sleep(5)
+        todo = failed
     return pd.DataFrame(out)
 
 

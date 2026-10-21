@@ -48,17 +48,21 @@ EUROPE = [
     I("aex", "AEX", "^AEX"),
 ]
 
+# Checked against Yahoo on 21 Oct 2026. TOPIX (^TOPX), the IPSA (^IPSA),
+# VSTOXX (^V2TX, V2TX.DE) and the Russell VIX (^RVX) return no data under any
+# symbol; CSI 300 (000300.SS, 399300.SZ) and USD/CNH (CNH=X) return only the
+# latest bar, so no change can be computed. They are left out rather than
+# promised and never printed. USD/CNY (CNY=X) stands in for USD/CNH.
 APAC = [
     I("nky", "Nikkei 225", "^N225", summary="equity"),
-    I("topix", "TOPIX", "^TOPX"), I("hsi", "Hang Seng", "^HSI"),
-    I("csi300", "CSI 300", "000300.SS"), I("kospi", "KOSPI", "^KS11"),
+    I("hsi", "Hang Seng", "^HSI"), I("kospi", "KOSPI", "^KS11"),
     I("sensex", "SENSEX", "^BSESN"), I("asx", "ASX 200", "^AXJO"),
     I("twii", "TAIEX", "^TWII"),
 ]
 
 AMERICAS = [
     I("ibov", "Bovespa", "^BVSP"), I("mexbol", "S&P/BMV IPC", "^MXX"),
-    I("merval", "S&P Merval", "^MERV"), I("ipsa", "S&P IPSA", "^IPSA"),
+    I("merval", "S&P Merval", "^MERV"),
     I("tsx", "S&P/TSX", "^GSPTSE"),
 ]
 
@@ -110,7 +114,7 @@ FX = [
     I("usdchf", "USD/CHF", "USDCHF=X", dec=4),
     I("usdcad", "USD/CAD", "USDCAD=X", dec=4),
     I("audusd", "AUD/USD", "AUDUSD=X", dec=4),
-    I("usdcnh", "USD/CNH", "CNH=X", dec=4),
+    I("usdcny", "USD/CNY", "CNY=X", dec=4),
     I("usdmxn", "USD/MXN", "USDMXN=X", dec=4),
     I("usdbrl", "USD/BRL", "USDBRL=X", dec=4),
     I("usdtry", "USD/TRY", "USDTRY=X", dec=4),
@@ -139,8 +143,6 @@ VOLATILITY = [
     I("vvix", "VVIX", "^VVIX"),
     I("skew", "SKEW", "^SKEW", dec=1),
     I("move", "MOVE (rates)", "^MOVE", dec=1),
-    I("vstoxx", "VSTOXX", "^V2TX"),
-    I("rvx", "Russell VIX", "^RVX"),
 ]
 
 DIGITAL = [

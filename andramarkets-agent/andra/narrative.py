@@ -252,12 +252,19 @@ def _call(client, messages: list[dict]) -> dict:
         kinds = [b.type for b in r.content]
         raise ValueError(f"reply carried no text (blocks: {kinds}, "
                          f"stop: {r.stop_reason}).")
-    if r.stop_reason == "max_tokens":
-        log.warning("Reply hit the token ceiling and may be truncated. "
-                    "Raise ANDRA_MAX_TOKENS above %d.", MAX_TOKENS)
     if os.getenv("ANDRA_DEBUG_REPLY"):
         log.info("Raw reply, first 600 chars: %r", txt[:600])
-    return parse_reply(txt)
+    # A reply cut off by the token ceiling, or one that skips a section, is a
+    # failed attempt, never a note: on 4 and 15 September such replies were
+    # printed stopping mid-sentence with every later section missing.
+    if r.stop_reason == "max_tokens":
+        raise ValueError(f"reply hit the {MAX_TOKENS}-token ceiling and is "
+                         f"truncated ({len(txt)} chars). Raise ANDRA_MAX_TOKENS.")
+    content = parse_reply(txt)
+    missing = [f for f in FIELDS if f not in content]
+    if missing:
+        raise ValueError(f"reply is incomplete: no {', '.join(missing)}.")
+    return content
 
 
 def _complete(content: dict) -> dict:
