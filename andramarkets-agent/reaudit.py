@@ -21,11 +21,30 @@ import re
 import sys
 from pathlib import Path
 
-from andra.narrative import TOLERANCE, _permitted, audit
+from andra.narrative import audit
 
-# The parser every run used before this change: at most three digits before a
-# missing thousands comma, and no exemption for index names or terms.
+# The check every run used until October 2026: at most three digits before a
+# missing thousands comma, no exemption for index names or terms, and a 2%
+# tolerance on every figure.
 _OLD_NUM = re.compile(r"[-+]?\d{1,3}(?:,\d{3})*(?:\.\d+)?|[-+]?\d+(?:\.\d+)?")
+TOLERANCE = 0.02
+
+
+def _permitted(facts: dict) -> set[float]:
+    vals: set[float] = set()
+
+    def walk(o):
+        if isinstance(o, dict):
+            [walk(v) for v in o.values()]
+        elif isinstance(o, list):
+            [walk(v) for v in o]
+        elif isinstance(o, (int, float)) and not isinstance(o, bool):
+            v = float(o)
+            vals.update({round(v, 2), round(abs(v), 2), round(v, 1), round(v, 0)})
+    walk(facts)
+    vals |= {float(x) for x in range(0, 101)}
+    vals |= {1900.0 + i for i in range(220)}
+    return vals
 
 
 def old_audit(content: dict, facts: dict) -> list[str]:

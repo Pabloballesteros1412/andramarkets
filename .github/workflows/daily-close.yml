@@ -2,8 +2,10 @@ name: Daily market close
 
 on:
   # 4:30 pm ET in summer (20:30 UTC) and in winter (21:30 UTC). Both fire
-  # every weekday; the run that comes before the close, or after the note
-  # went out, finds the session already sent and stops without emailing.
+  # every weekday. A scheduled run reports only the session that closed that
+  # day in New York: in winter the 20:30 UTC firing (3:30 pm ET) stops
+  # without reporting anything, and a firing after the note went out stops
+  # on the dedup marker.
   schedule:
     - cron: "30 20 * * 1-5"
     - cron: "30 21 * * 1-5"

@@ -47,6 +47,20 @@ def last_completed(now: dt.datetime) -> dt.date:
     return done.index[-1].date()
 
 
+def todays_session(now: dt.datetime) -> dt.date | None:
+    """The session that closed today in New York, or None if it has not yet
+    (or there is none today: a weekend or a holiday).
+
+    Scheduled runs only ever report today's close. Two crons cover summer
+    and winter time, so in winter the earlier one fires at 3:30 pm ET, before
+    the close: it must stop, not fall back to yesterday's session, even if
+    yesterday's note was never sent.
+    """
+    from zoneinfo import ZoneInfo
+    d = last_completed(now)
+    return d if d == now.astimezone(ZoneInfo("America/New_York")).date() else None
+
+
 def last_completed_weekday(now: dt.datetime) -> dt.date:
     """Calendar-free fallback for demo runs only: weekends, no holidays."""
     d = now.date()

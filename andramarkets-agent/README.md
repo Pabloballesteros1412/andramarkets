@@ -46,8 +46,11 @@ mkdir -p logs && crontab deploy/crontab.txt
 Also included: `deploy/Dockerfile` and `.github/workflows/daily-close.yml`,
 which runs on its own every weekday at 20:30 and 21:30 UTC (4:30 pm ET in
 summer and in winter). Actions schedules in UTC, so both DST windows are
-declared: the firing that comes before the close, or after the note went
-out, finds the session already sent and stops without emailing. Run workflow
+declared. A scheduled run reports only the session that closed that day in
+New York, so the firing that lands before the close (20:30 UTC in winter)
+stops without reporting yesterday's session, and the one after the note
+went out stops on the dedup marker. A manual run can still catch up a missed
+session. Run workflow
 still works by hand; tick resend to send a session again.
 
 ---
