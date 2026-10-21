@@ -35,7 +35,7 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
-        run: python run_daily.py --force
+        run: python run_daily.py
 
       - name: Save publish state
         if: always()
