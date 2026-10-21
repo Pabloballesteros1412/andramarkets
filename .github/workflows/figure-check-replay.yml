@@ -1,0 +1,45 @@
+name: Figure check replay
+
+# Re-checks the final note of the latest runs with the figure check those runs
+# used and with the current one, and writes the comparison to the run summary.
+# Reads artifacts only: nothing is published or emailed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Number of latest edition artifacts to re-check
+        default: "20"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: andramarkets-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download the latest edition artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNS: ${{ inputs.runs }}
+        run: |
+          mkdir -p replay
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.expired | not) | select(.name | test("^andramarkets-[0-9]+$")) | .name' \
+            | head -n "$RUNS" > replay/names.txt
+          while read -r name; do
+            gh run download "${name#andramarkets-}" --name "$name" --dir "replay/$name" \
+              || echo "Could not download $name"
+          done < replay/names.txt
+
+      - name: Re-check
+        run: python reaudit.py replay/andramarkets-*
