@@ -19,6 +19,8 @@ import os
 import re
 from dataclasses import dataclass, field
 
+from .universe import all_instruments
+
 log = logging.getLogger("andra.narrative")
 
 MODEL = os.getenv("ANDRA_MODEL", "claude-sonnet-5")
@@ -137,7 +139,33 @@ class Note:
     attempts: int = 1
 
 
-_NUM = re.compile(r"[-+]?\d{1,3}(?:,\d{3})*(?:\.\d+)?|[-+]?\d+(?:\.\d+)?")
+# A figure is read whole: 7,747.71 and 7747.71 are one number. The old
+# pattern took at most three digits before a missing comma, so 7747.71 was
+# audited as 774 and 7.71, two figures no fact pack holds. A sign only counts
+# when it does not follow a digit, so 7-10 and 2026-10-21 hold no negatives.
+_NUM = re.compile(r"(?<![\d.])(?:(?<!\d)[-+])?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?")
+
+# Numbers that are part of a name or a fixed term, not figures: index names
+# (S&P 500, Nikkei 225, ASX 200), tenors and look-backs (10-year, 200-day,
+# 52-week) and curve shorthand (2s10s, 3m10y, 5y5y, 10y). They are removed
+# before the audit. Left in, "S&P 500" failed the check whenever no figure in
+# the fact pack happened to sit within 2% of 500.
+_ALIASES = ("MidCap 400", "Midcap 400", "S&P 400", "S&P 600", "SmallCap 600",
+            "Nasdaq-100", "Russell 1000", "Russell 3000", "Euro Stoxx 50",
+            "Stoxx 50", "Stoxx 600", "FTSE 250", "Dow 30", "CSI 300",
+            "Nikkei 225", "ASX 200", "Hang Seng 50")
+_NAMES = re.compile("|".join(
+    r"(?<![\w&])" + re.escape(n).replace(r"\ ", r"[\s-]") + r"(?!\w)"
+    for n in sorted({i.name for i in all_instruments() if re.search(r"\d", i.name)}
+                    | set(_ALIASES), key=len, reverse=True)), re.I)
+_TERMS = re.compile(
+    r"\b\d{1,3}[\s-](?:day|week|month|year|session)\b"   # 200-day, 10-year
+    r"|\b\d{1,2}[smy]\d{1,2}[smy]s?\b"                     # 2s10s, 3m10y, 5y5y
+    r"|\b\d{1,2}[my]\b", re.I)                              # 10y, 3m
+
+
+def _strip_names(text: str) -> str:
+    return _TERMS.sub(" ", _NAMES.sub(" ", text))
 
 
 def _permitted(facts: dict) -> set[float]:
@@ -159,7 +187,7 @@ def _permitted(facts: dict) -> set[float]:
 
 def _figures(text: str) -> list[float]:
     out = []
-    for m in _NUM.findall(text):
+    for m in _NUM.findall(_strip_names(text)):
         try:
             out.append(float(m.replace(",", "")))
         except ValueError:
