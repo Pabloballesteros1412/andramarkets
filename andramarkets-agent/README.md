@@ -150,8 +150,13 @@ score, missing series.
   Trading Economics or Econoday and section 13 fills itself.
 - **Direct posting.** Both platforms have APIs. Left out on purpose: read the
   note before it goes out under the house name.
-- **History.** `facts_*.json` is archived every session. After a few months you
-  can feed prior sessions to the writer for narrative continuity.
+- **History.** Every run's report PDF, `facts_*.json`, `note_*.json` and
+  `series_*.json` are kept for good as a release in this private repo, tagged
+  `archive-YYYY-MM-DD`, one asset per file per run (`<file>_r<run id>`).
+  `archive.py` does it after each run; the Archive backfill workflow copies
+  every artifact that has not expired yet (artifacts last 90 days). After a
+  few months you can feed prior sessions to the writer for narrative
+  continuity.
 - **Full index breadth.** The watchlist is 26 mega caps today. Expanding to the
   full S&P 500 improves breadth and dispersion at the cost of download time.
 

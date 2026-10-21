@@ -1,0 +1,29 @@
+name: Archive backfill
+
+# One-off: copies every edition artifact that has not expired yet into the
+# permanent archive (releases tagged archive-YYYY-MM-DD). Safe to run again:
+# runs already archived are skipped.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: andramarkets-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Archive every unexpired artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python archive.py --backfill

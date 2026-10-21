@@ -47,6 +47,14 @@ jobs:
           git diff --cached --quiet || git commit -m "Update publish state [skip ci]"
           git push
 
+      - name: Archive permanently
+        # Artifacts expire after 90 days. This keeps the PDF, fact pack, note
+        # and chart data for good, as a release in this private repo.
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python archive.py out
+
       - name: Archive the edition
         uses: actions/upload-artifact@v4
         with:
