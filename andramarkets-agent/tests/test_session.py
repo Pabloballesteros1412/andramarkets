@@ -3,7 +3,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from andra.session import SessionError, check_requested, last_completed
+from andra.session import (SessionError, check_requested, last_completed,
+                           todays_session)
 
 NY = ZoneInfo("America/New_York")
 
@@ -54,3 +55,23 @@ def test_requested_date_rejected(date):
 
 def test_requested_past_session_accepted():
     check_requested(dt.date(2026, 10, 20), at(2026, 10, 21, 15, 0))
+
+
+# The two weekday crons, 20:30 and 21:30 UTC, across both clock changes.
+# Summer (EDT): both fire after the close; winter (EST): 20:30 UTC is 3:30 pm
+# ET, before it. A scheduled run reports today's close or nothing.
+@pytest.mark.parametrize("utc, expected", [
+    ("2026-10-30T20:30", dt.date(2026, 10, 30)),   # Fri, EDT, 4:30 pm
+    ("2026-10-30T21:30", dt.date(2026, 10, 30)),   # Fri, EDT, 5:30 pm
+    ("2026-11-02T20:30", None),                    # Mon, EST, 3:30 pm: before the close
+    ("2026-11-02T21:30", dt.date(2026, 11, 2)),    # Mon, EST, 4:30 pm
+    ("2026-11-26T21:30", None),                    # Thanksgiving
+    ("2026-11-27T20:30", dt.date(2026, 11, 27)),   # half day, 1 pm close
+    ("2027-03-12T20:30", None),                    # Fri, last EST day
+    ("2027-03-12T21:30", dt.date(2027, 3, 12)),
+    ("2027-03-15T20:30", dt.date(2027, 3, 15)),    # Mon, EDT again
+    ("2027-03-15T21:30", dt.date(2027, 3, 15)),
+])
+def test_scheduled_runs_report_only_todays_close(utc, expected):
+    now = dt.datetime.fromisoformat(utc).replace(tzinfo=dt.timezone.utc)
+    assert todays_session(now) == expected

@@ -4,8 +4,9 @@ Three passes separate a publishable note from an automated bulletin:
 
   1. WRITE    The model gets only the verified fact pack from
               analytics.fact_pack(). It does not browse, recall or estimate.
-  2. AUDIT    Every figure in the returned text is checked against the set of
-              permitted values, with a rounding tolerance.
+  2. AUDIT    Every figure in the returned text is checked against the fact
+              pack: a percentage to within 0.01 points, a level to rounding
+              (0.05%, or the stored value rounded to the decimals quoted).
   3. REWRITE  The text goes back with offending figures flagged. On a second
               failure the note ships with a warning in the email subject.
 
@@ -24,7 +25,9 @@ from .universe import all_instruments
 log = logging.getLogger("andra.narrative")
 
 MODEL = os.getenv("ANDRA_MODEL", "claude-sonnet-5")
-TOLERANCE = 0.02
+# How close a figure in the text must be to a value in the fact pack.
+LEVEL_TOL = 0.0005     # levels and prices: 0.05% of the stored value
+POINT_TOL = 0.01       # anything quoted in % (changes, yields): 0.01 points
 
 SYSTEM = """You write the daily US market close note for Andra Markets, a
 markets research desk. The note goes out under the house name and is read by
@@ -143,7 +146,9 @@ class Note:
 # pattern took at most three digits before a missing comma, so 7747.71 was
 # audited as 774 and 7.71, two figures no fact pack holds. A sign only counts
 # when it does not follow a digit, so 7-10 and 2026-10-21 hold no negatives.
-_NUM = re.compile(r"(?<![\d.])(?:(?<!\d)[-+])?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?")
+_NUM = re.compile(
+    r"(?<![\d.])((?:(?<!\d)[-+])?)((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?)"
+    r"(\s*(?:%|per\s?cent\b|bps?\b|basis points?\b))?", re.I)
 
 # Numbers that are part of a name or a fixed term, not figures: index names
 # (S&P 500, Nikkei 225, ASX 200), tenors and look-backs (10-year, 200-day,
@@ -168,8 +173,8 @@ def _strip_names(text: str) -> str:
     return _TERMS.sub(" ", _NAMES.sub(" ", text))
 
 
-def _permitted(facts: dict) -> set[float]:
-    vals: set[float] = set()
+def _fact_values(facts: dict) -> list[float]:
+    vals: list[float] = []
 
     def walk(o):
         if isinstance(o, dict):
@@ -177,33 +182,52 @@ def _permitted(facts: dict) -> set[float]:
         elif isinstance(o, list):
             [walk(v) for v in o]
         elif isinstance(o, (int, float)) and not isinstance(o, bool):
-            v = float(o)
-            vals.update({round(v, 2), round(abs(v), 2), round(v, 1), round(v, 0)})
+            vals.append(float(o))
     walk(facts)
-    vals |= {float(x) for x in range(0, 101)}
-    vals |= {1900.0 + i for i in range(220)}
     return vals
 
 
-def _figures(text: str) -> list[float]:
+def _figures(text: str) -> list[tuple[str, float, bool, int, str]]:
+    """(as written, value, signed, decimals quoted, unit: '%', 'bp' or '')."""
     out = []
-    for m in _NUM.findall(_strip_names(text)):
-        try:
-            out.append(float(m.replace(",", "")))
-        except ValueError:
-            pass
+    for m in _NUM.finditer(_strip_names(text)):
+        sign, num, dec, unit = m.groups()
+        unit = (unit or "").strip().lower()
+        unit = "%" if unit.startswith(("%", "per")) else "bp" if unit else ""
+        value = float(num.replace(",", "")) * (-1 if sign == "-" else 1)
+        out.append((m.group(0).strip(), value, bool(sign), len(dec or ""), unit))
     return out
 
 
+def _supported(n: float, signed: bool, decimals: int, unit: str,
+               facts: list[float]) -> bool:
+    # A bare integer up to 100 is a count, a day of the month or an hour (four
+    # catalysts, 18 advancers, 9 Oct); a year is a year. Neither is checked.
+    if not unit and decimals == 0 and (0 <= n <= 100 or 1900 <= n <= 2119):
+        return True
+    # A figure written with a sign must match the sign stored; one written
+    # without ("fell 0.84%") may quote a negative value by its size.
+    targets = facts if signed else [abs(v) for v in facts]
+    eps = 1e-9
+    if unit == "%":
+        return any(abs(n - v) <= POINT_TOL + eps for v in targets)
+    # Levels, prices, basis points and other ratios: within 0.05%, or the
+    # stored value rounded half up to the decimals written (EUR/USD 1.123
+    # quoted as 1.12, a 41.5bp spread as 42bp). A whole-number level must be
+    # within 0.05%: 7,757 for 7,757.17 passes, 7,800 does not.
+    if unit == "bp" or decimals >= 1:
+        half_step = 0.5 * 10 ** -decimals
+        if any(abs(n - v) <= half_step + eps for v in targets):
+            return True
+    return any(abs(n - v) <= LEVEL_TOL * abs(v) + eps for v in targets)
+
+
 def audit(content: dict, facts: dict) -> list[str]:
-    allowed = _permitted(facts)
+    stored = _fact_values(facts)
     text = " ".join(v if isinstance(v, str) else " ".join(map(str, v))
                     for v in content.values())
-    bad = []
-    for n in _figures(text):
-        if any(abs(n - p) <= max(TOLERANCE, abs(p) * TOLERANCE) for p in allowed):
-            continue
-        bad.append(f"{n:g}")
+    bad = [raw for raw, n, signed, dec, unit in _figures(text)
+           if not _supported(n, signed, dec, unit, stored)]
     return sorted(set(bad))
 
 

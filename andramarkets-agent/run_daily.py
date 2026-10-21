@@ -43,7 +43,7 @@ from pathlib import Path
 from andra import render
 from andra.analytics import fact_pack
 from andra.session import (SessionError, check_requested, last_completed,
-                           last_completed_weekday)
+                           last_completed_weekday, todays_session)
 
 logging.basicConfig(level=logging.INFO, datefmt="%H:%M:%S",
                     format="%(asctime)s  %(levelname)-7s %(name)s | %(message)s")
@@ -96,6 +96,10 @@ def main() -> int:
     # Kept so the crontab's 1:20 pm ET line still parses. Half days need no
     # flag: the session cut-off follows each day's actual close.
     ap.add_argument("--half-day", action="store_true", dest="half")
+    # Scheduled runs report today's close or nothing. Set on its own for the
+    # Actions schedule; the crontab can pass it.
+    ap.add_argument("--today-only", action="store_true", dest="today_only",
+                    default=os.getenv("GITHUB_EVENT_NAME") == "schedule")
     args = ap.parse_args()
 
     ny = _ny_now()
@@ -112,6 +116,13 @@ def main() -> int:
                 date = last_completed(ny)
             except SessionError:
                 date = last_completed_weekday(ny)
+        elif args.today_only:
+            date = todays_session(ny)
+            if date is None:
+                log.info("No NYSE session has closed today yet (New York time "
+                         "%s). Scheduled run: nothing to report.",
+                         ny.strftime("%Y-%m-%d %H:%M"))
+                return 0
         else:
             date = last_completed(ny)
     except SessionError as e:
