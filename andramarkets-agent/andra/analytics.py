@@ -120,23 +120,41 @@ def fact_pack(mf: MarketFrame) -> dict:
     Any figure that appears in the note must exist in this structure. That is
     the contract that makes the prose auditable.
     """
-    def blk(name, cols=("name", "last", "chg", "ytd")):
+    target = mf.asof.isoformat()
+
+    def blk(name, cols=("name", "last", "chg", "ytd", "date", "time")):
         d = mf.block(name)
-        return [] if d.empty else d[list(cols)].round(3).reset_index().to_dict("records")
+        if d.empty:
+            return []
+        rows = d[list(cols)].round(3).reset_index().to_dict("records")
+        for r in rows:
+            # A row whose print is not from the session reported on (a market
+            # closed that day, a late or missing print) is flagged, so the
+            # reader of the facts can hold a note that mixes dates.
+            r["off_session"] = r["date"] != target
+        return rows
+
+    blocks = {name: blk(name) for name in (
+        "us_equity", "sectors", "europe", "apac", "americas", "curve",
+        "breakevens", "credit", "fx", "commodities", "volatility", "digital")}
+    off = sorted(r["key"] for rows in blocks.values() for r in rows if r["off_session"])
 
     return {
-        "date": mf.asof.isoformat(),
+        "date": target,
         "risk_barometer": risk_barometer(mf),
         "breadth": breadth(mf),
         "curve": curve(mf),
         "movers": movers(mf),
         "extremes": fresh_extremes(mf),
-        "us_equity": blk("us_equity"), "sectors": blk("sectors"),
-        "europe": blk("europe"), "apac": blk("apac"), "americas": blk("americas"),
-        "treasury_curve": blk("curve"), "breakevens": blk("breakevens"),
-        "credit": blk("credit"), "fx": blk("fx"),
-        "commodities": blk("commodities"), "volatility": blk("volatility"),
-        "digital": blk("digital"),
+        "us_equity": blocks["us_equity"], "sectors": blocks["sectors"],
+        "europe": blocks["europe"], "apac": blocks["apac"],
+        "americas": blocks["americas"],
+        "treasury_curve": blocks["curve"], "breakevens": blocks["breakevens"],
+        "credit": blocks["credit"], "fx": blocks["fx"],
+        "commodities": blocks["commodities"], "volatility": blocks["volatility"],
+        "digital": blocks["digital"],
         "series_without_print": mf.missing,
         "series_not_yet_published": getattr(mf, "stale", []),
+        # Every row above whose own print date is not `date`.
+        "series_off_session": off,
     }
