@@ -90,7 +90,9 @@ def main() -> int:
     ap.add_argument("--demo", action="store_true")
     ap.add_argument("--no-mail", action="store_true")
     ap.add_argument("--force", action="store_true",
-                    help="send even if this session was already sent")
+                    default=os.getenv("ANDRA_RESEND", "").lower() == "true",
+                    help="send even if this session was already sent "
+                         "(also set by ANDRA_RESEND=true)")
     # Kept so the crontab's 1:20 pm ET line still parses. Half days need no
     # flag: the session cut-off follows each day's actual close.
     ap.add_argument("--half-day", action="store_true", dest="half")

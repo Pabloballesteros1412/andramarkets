@@ -2,6 +2,11 @@ name: Daily market close
 
 on:
   workflow_dispatch:
+    inputs:
+      resend:
+        description: Send again even if this session's note was already sent
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -9,6 +14,9 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      # Read by run_daily.py as --force: skips only the dedup gate.
+      ANDRA_RESEND: ${{ inputs.resend || false }}
     defaults:
       run:
         working-directory: andramarkets-agent
