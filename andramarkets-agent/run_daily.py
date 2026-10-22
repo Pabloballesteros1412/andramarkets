@@ -6,6 +6,8 @@
     python run_daily.py --demo         synthetic fixture, no API calls
     python run_daily.py --date 2026-08-19   a past session, checked against NYSE
     python run_daily.py --force        send again even if the session was sent
+    python run_daily.py --replay DIR   an archived run again, no model or email
+                                       (replay.py fetches the files and calls this)
 
 Scheduling: two crons cover the summer and winter UTC offset for the 4:00 pm
 ET close. Both may fire close together, and GitHub's free scheduler can also
@@ -84,7 +86,7 @@ def _mark_published(date: dt.date) -> None:
     _marker().write_text(date.isoformat())
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--date")
     ap.add_argument("--demo", action="store_true")
@@ -100,14 +102,26 @@ def main() -> int:
     # Actions schedule; the crontab can pass it.
     ap.add_argument("--today-only", action="store_true", dest="today_only",
                     default=os.getenv("GITHUB_EVENT_NAME") == "schedule")
-    args = ap.parse_args()
+    # Replay: an archived run's facts and note go through every step again.
+    # Like demo: no model call, no email, no marker, no edition number.
+    ap.add_argument("--replay", metavar="DIR")
+    ap.add_argument("--replay-data", choices=("archive", "live"), default="archive")
+    ap.add_argument("--out", help="output folder (default out/)")
+    args = ap.parse_args(argv)
+    out_dir = Path(args.out) if args.out else OUT
+    replay = None
+    if args.replay:
+        import replay as replay_mod
+        replay = replay_mod.load_folder(Path(args.replay))
 
     ny = _ny_now()
 
     # The date is never today's date by default, and never one NYSE did not
     # trade on, whatever flags are given.
     try:
-        if args.date:
+        if replay:
+            date = dt.date.fromisoformat(replay["facts"]["date"])
+        elif args.date:
             date = dt.date.fromisoformat(args.date)
             if not args.demo:
                 check_requested(date, ny)
@@ -133,15 +147,18 @@ def main() -> int:
 
     # Forced and demo runs skip only the dedup gate, and are never recorded
     # in the marker, so they can never suppress a later scheduled run.
-    if not (args.force or args.demo) and _already_published(date):
+    if not (args.force or args.demo or replay) and _already_published(date):
         log.info("Already published the %s session. Skipping to avoid "
                  "sending a second email for the same close.", date)
         return 0
 
-    OUT.mkdir(exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     # 1 · Data
-    if args.demo:
+    if replay and args.replay_data == "archive":
+        mf = replay_mod.archived_frame(replay["facts"])
+        log.info("Replay: market data rebuilt from the archived fact pack.")
+    elif args.demo:
         from demo_fixture import synthetic_frame
         mf = synthetic_frame(date)
         log.info("Demo mode: synthetic data, no external calls.")
@@ -153,7 +170,12 @@ def main() -> int:
     # 2 · Writing
     facts = fact_pack(mf)
     mode = "model"
-    if args.demo:
+    carried = []
+    if replay and args.replay_data == "archive":
+        carried = replay_mod.carry_over(facts, replay["facts"])
+    if replay:
+        note, mode = replay_mod.archived_note(replay, facts)
+    elif args.demo:
         from demo_fixture import demo_note
         note = demo_note()
     else:
@@ -175,17 +197,20 @@ def main() -> int:
 
     # 3 · Composition
     stamp = date.strftime("%Y%m%d")
-    edition = _edition()
+    if replay:
+        edition = (replay.get("manifest") or {}).get("edition") or "REPLAY"
+    else:
+        edition = _edition()
     with tempfile.TemporaryDirectory() as tmp:
-        ex = render.build_exhibits(mf, tmp)
+        ex = render.build_exhibits(mf, tmp, facts=facts)
         ctx = render.build_context(mf, note, ex, calendar=_calendar(),
-                                 edition=edition, social_tmp=tmp)
-        report = str(OUT / f"AndraMarkets_Close_{stamp}.pdf")
-        carousel = str(OUT / f"AndraMarkets_LinkedIn_{stamp}.pdf")
+                                 edition=edition, social_tmp=tmp, facts=facts)
+        report = str(out_dir / f"AndraMarkets_Close_{stamp}.pdf")
+        carousel = str(out_dir / f"AndraMarkets_LinkedIn_{stamp}.pdf")
         render.report_pdf(ctx, report)
         render.linkedin_pdf(ctx, carousel)
-        stills = render.report_images(report, str(OUT / f"tiktok_{stamp}"), f"andra_{stamp}")
-    log.info("Built 2 documents and %d page stills in %s", len(stills), OUT)
+        stills = render.report_images(report, str(out_dir / f"tiktok_{stamp}"), f"andra_{stamp}")
+    log.info("Built 2 documents and %d page stills in %s", len(stills), out_dir)
 
     # 4 · Copy
     from andra.social import check, linkedin_caption, tiktok_caption, tiktok_script
@@ -193,25 +218,31 @@ def main() -> int:
     tt = tiktok_caption(note, ctx)
     script = tiktok_script(note)
     checks = check(li)
-    (OUT / f"linkedin_caption_{stamp}.txt").write_text(li, encoding="utf-8")
-    (OUT / f"tiktok_caption_{stamp}.txt").write_text(f"{tt}\n\n---\n{script}", encoding="utf-8")
-    (OUT / f"facts_{stamp}.json").write_text(
+    (out_dir / f"linkedin_caption_{stamp}.txt").write_text(li, encoding="utf-8")
+    (out_dir / f"tiktok_caption_{stamp}.txt").write_text(f"{tt}\n\n---\n{script}", encoding="utf-8")
+    (out_dir / f"facts_{stamp}.json").write_text(
         json.dumps(facts, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-    (OUT / f"note_{stamp}.json").write_text(
+    (out_dir / f"note_{stamp}.json").write_text(
         json.dumps(note.content, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     # What was only visible inside the PDF and the email subject: whether the
     # figure check passed, what it rejected, and how the note was written.
-    (OUT / f"manifest_{stamp}.json").write_text(json.dumps({
+    (out_dir / f"manifest_{stamp}.json").write_text(json.dumps({
         "date": date.isoformat(), "edition": edition,
         "audit_ok": note.audit_ok, "unsupported": note.unsupported,
-        "attempts": note.attempts, "mode": mode, "demo": bool(args.demo),
+        "attempts": note.attempts, "mode": mode,
+        "demo": bool(args.demo or replay),
+        **({"replay_of": str(args.replay), "replay_data": args.replay_data,
+            "carried_from_archive": carried} if replay else {}),
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     _series, _prev = [], None
     try:
         _prev = float(mf.snap.at["spx", "prev"])
     except Exception:  # noqa: BLE001
         _prev = None
-    if not args.demo:
+    if replay and (replay.get("series") or {}).get("series"):
+        _series = replay["series"]["series"]
+        _prev = replay["series"].get("prev_close", _prev)
+    elif not (args.demo or replay):
         try:
             import yfinance as yf
             _tkr = str(mf.snap.at["spx", "ticker"])
@@ -230,14 +261,14 @@ def main() -> int:
             _series = [round(float(x), 2) for x in mf.series("spx", 60).tolist()]
         except Exception:  # noqa: BLE001
             _series = []
-    (OUT / f"series_{stamp}.json").write_text(
+    (out_dir / f"series_{stamp}.json").write_text(
         json.dumps({"series": _series, "prev_close": _prev},
                    ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     log.info("Caption: %d chars | figure in hook: %s | style flags: %s",
              checks["characters"], checks["hook_has_figure"],
              checks["style_flags"] or "none")
 
-    if args.no_mail or args.demo:
+    if args.no_mail or args.demo or replay:
         log.info("Email skipped.")
         return 0
 
