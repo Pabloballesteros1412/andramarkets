@@ -206,7 +206,10 @@ def main() -> int:
         "audit_ok": note.audit_ok, "unsupported": note.unsupported,
         "attempts": note.attempts, "mode": mode, "demo": bool(args.demo),
     }, ensure_ascii=False, indent=2), encoding="utf-8")
-    _series, _prev = [], None
+    # 5-minute bars of the session for the video, or the last 60 daily
+    # closes when they cannot be had (demo runs, a failed fetch). The interval
+    # is saved so the video never draws daily closes as if they were intraday.
+    _series, _prev, _interval = [], None, "5m"
     try:
         _prev = float(mf.snap.at["spx", "prev"])
     except Exception:  # noqa: BLE001
@@ -226,12 +229,13 @@ def main() -> int:
         except Exception as e:  # noqa: BLE001
             log.warning("Intraday S&P fetch failed, using daily fallback: %s", e)
     if len(_series) < 2:
+        _interval = "1d"
         try:
             _series = [round(float(x), 2) for x in mf.series("spx", 60).tolist()]
         except Exception:  # noqa: BLE001
             _series = []
     (OUT / f"series_{stamp}.json").write_text(
-        json.dumps({"series": _series, "prev_close": _prev},
+        json.dumps({"series": _series, "prev_close": _prev, "interval": _interval},
                    ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     log.info("Caption: %d chars | figure in hook: %s | style flags: %s",
              checks["characters"], checks["hook_has_figure"],

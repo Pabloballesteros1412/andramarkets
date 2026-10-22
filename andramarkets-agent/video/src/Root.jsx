@@ -45,13 +45,20 @@ const Scene = ({data}) => {
 
   const chg = d.spx?.chg ?? 0;
   const up = chg >= 0;
-  const col = up ? C.up : C.down;
+  const badgeCol = up ? C.up : C.down;
   const riskColor = (d.risk?.score ?? 0) >= 0 ? C.up : C.down;
 
-  // real intraday series, with sane fallbacks
+  // Intraday bars against the previous close; when the run only had daily
+  // closes (demo runs, a failed intraday fetch) the line is the last sessions
+  // and the baseline is where they started, labelled as such.
   let series = Array.isArray(d.spx?.series) ? d.spx.series.filter((x) => typeof x === 'number') : [];
-  const prev = d.spx?.prev_close ?? (series.length ? series[0] : 0);
+  const daily = d.spx?.interval === '1d' && series.length >= 2;
+  const prev = daily ? series[0] : d.spx?.prev_close ?? (series.length ? series[0] : 0);
+  const baseLabel = daily ? `${series.length} sessions ago` : 'prev close';
   if (series.length < 2) series = [prev, d.spx?.last ?? prev];
+  // The line is coloured by the move it draws: the session intraday, the
+  // whole span when it shows daily closes.
+  const col = daily ? (series[series.length - 1] >= prev ? C.up : C.down) : badgeCol;
 
   const lo = Math.min(prev, ...series);
   const hi = Math.max(prev, ...series);
@@ -64,6 +71,10 @@ const Scene = ({data}) => {
   const baseY = mapY(prev);
   const areaPath = `${linePath} L${mapX(series.length - 1).toFixed(1)},${baseY.toFixed(1)} L${mapX(0).toFixed(1)},${baseY.toFixed(1)} Z`;
   const endX = mapX(series.length - 1), endY = mapY(series[series.length - 1]);
+
+  // Two lines at most above the plot (PY0): model headlines run 60 to 90
+  // characters, which wrapped to three lines at 72px and crossed the chart.
+  const headSize = (d.headline || '').length > 48 ? 56 : 72;
 
   const at = (a, b, from, to, ease) =>
     interpolate(frame, [a * fps, b * fps], [from, to], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: ease});
@@ -95,7 +106,7 @@ const Scene = ({data}) => {
         <span style={{color: C.muted, fontWeight: 400, fontFamily: INTER, fontSize: 28}}>US market close</span>
       </div>
 
-      <div style={{position: 'absolute', top: '12.5%', left: '5%', right: '34%', fontFamily: GROTESK, fontWeight: 700, lineHeight: 1.08, fontSize: 72, color: C.ink, opacity: headO, transform: `translateY(${headY}px)`}}>
+      <div style={{position: 'absolute', top: '12.5%', left: '5%', right: '8%', fontFamily: GROTESK, fontWeight: 700, lineHeight: 1.08, fontSize: headSize, color: C.ink, opacity: headO, transform: `translateY(${headY}px)`}}>
         {d.headline}
       </div>
 
@@ -107,7 +118,7 @@ const Scene = ({data}) => {
           </linearGradient>
         </defs>
         <line x1={PX0} y1={baseY} x2={PX1} y2={baseY} stroke={C.muted} strokeWidth="2" strokeDasharray="10 10" opacity={0.55 * baseO} />
-        <text x={PX1} y={baseY - 14} fill={C.muted} fontSize="22" textAnchor="end" fontFamily={INTER} opacity={baseO}>prev close</text>
+        <text x={PX1} y={baseY - 14} fill={C.muted} fontSize="22" textAnchor="end" fontFamily={INTER} opacity={baseO}>{baseLabel}</text>
         <path d={areaPath} fill="url(#areafill)" opacity={areaO} />
         <path d={linePath} pathLength="1" fill="none" stroke={col} strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="1" strokeDashoffset={dash} style={{filter: `drop-shadow(0 0 10px ${col}aa)`}} />
         <circle cx={endX} cy={endY} r="11" fill="#fff" opacity={peakO} style={{filter: `drop-shadow(0 0 14px ${col})`}} />
@@ -115,7 +126,7 @@ const Scene = ({data}) => {
 
       <div style={{position: 'absolute', left: `${(endX / 1920) * 100}%`, top: `${(endY / 1080) * 100}%`, width: 36, height: 36, marginLeft: -18, marginTop: -18, border: `3px solid ${col}`, borderRadius: '50%', opacity: rippleO, transform: `scale(${rippleScale})`}} />
 
-      <div style={{position: 'absolute', left: `${(endX / 1920) * 100}%`, top: `${(endY / 1080) * 100}%`, transform: `translate(-50%,-140%) scale(${badge})`, background: col, color: '#0c0f14', fontFamily: GROTESK, fontWeight: 700, fontSize: 42, padding: '12px 26px', borderRadius: 999, boxShadow: `0 0 40px ${col}66`, whiteSpace: 'nowrap'}}>
+      <div style={{position: 'absolute', left: `${(endX / 1920) * 100}%`, top: `${(endY / 1080) * 100}%`, transform: `translate(-50%,-140%) scale(${badge})`, background: badgeCol, color: '#0c0f14', fontFamily: GROTESK, fontWeight: 700, fontSize: 42, padding: '12px 26px', borderRadius: 999, boxShadow: `0 0 40px ${badgeCol}66`, whiteSpace: 'nowrap'}}>
         {pct(chg)}
       </div>
 

@@ -15,6 +15,12 @@ on:
         description: Send again even if this session's note was already sent
         type: boolean
         default: false
+      demo:
+        description: >-
+          Demo run: synthetic data, no model call, no email, nothing committed
+          or archived. Builds every file and the video, for testing.
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -30,6 +36,9 @@ jobs:
     env:
       # Read by run_daily.py as --force: skips only the dedup gate.
       ANDRA_RESEND: ${{ inputs.resend || false }}
+      # Demo runs name their artifacts andramarkets-demo-<run id>, which
+      # neither archive.py nor the site's note importer picks up.
+      ANDRA_DEMO: ${{ inputs.demo || false }}
     defaults:
       run:
         working-directory: andramarkets-agent
@@ -48,6 +57,7 @@ jobs:
           playwright install --with-deps chromium
 
       - name: Build and publish
+        if: env.ANDRA_DEMO != 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
@@ -58,8 +68,13 @@ jobs:
           MAIL_TO: ${{ secrets.MAIL_TO }}
         run: python run_daily.py
 
+      - name: Build demo edition
+        # No secrets: a demo run makes no model call and sends no email.
+        if: env.ANDRA_DEMO == 'true'
+        run: python run_daily.py --demo --no-mail
+
       - name: Save publish state
-        if: always()
+        if: always() && env.ANDRA_DEMO != 'true'
         run: |
           git config user.name "andra-bot"
           git config user.email "actions@users.noreply.github.com"
@@ -71,7 +86,7 @@ jobs:
       - name: Archive permanently
         # Artifacts expire after 90 days. This keeps the PDF, fact pack, note
         # and chart data for good, as a release in this private repo.
-        if: always()
+        if: always() && env.ANDRA_DEMO != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: python archive.py out
@@ -79,7 +94,7 @@ jobs:
       - name: Archive the edition
         uses: actions/upload-artifact@v4
         with:
-          name: andramarkets-${{ github.run_id }}
+          name: ${{ env.ANDRA_DEMO == 'true' && 'andramarkets-demo' || 'andramarkets' }}-${{ github.run_id }}
           path: andramarkets-agent/out/
 
       - name: Set up Node
@@ -88,11 +103,13 @@ jobs:
           node-version: "22"
 
       - name: Install video dependencies
+        id: video_deps
         continue-on-error: true
         working-directory: andramarkets-agent/video
         run: npm install
 
       - name: Build data and render video
+        id: video
         continue-on-error: true
         working-directory: andramarkets-agent/video
         run: |
@@ -102,8 +119,27 @@ jobs:
           npx remotion render src/index.js DailyRecap out/video.mp4 --props="./video-data.json"
 
       - name: Upload video
+        id: video_upload
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: andra-video-${{ github.run_id }}
+          name: ${{ env.ANDRA_DEMO == 'true' && 'andra-video-demo' || 'andra-video' }}-${{ github.run_id }}
           path: andramarkets-agent/video/out/video.mp4
+          if-no-files-found: error
+
+      - name: Report the video step
+        # The video steps may fail without failing the run, but never
+        # silently: a failure shows as a warning on the run and in its summary.
+        if: always()
+        env:
+          DEPS: ${{ steps.video_deps.outcome }}
+          RENDER: ${{ steps.video.outcome }}
+          UPLOAD: ${{ steps.video_upload.outcome }}
+        run: |
+          if [ "$DEPS" = success ] && [ "$RENDER" = success ] && [ "$UPLOAD" = success ]; then
+            echo "Video: rendered and uploaded ($(du -h video/out/video.mp4 | cut -f1))." >> "$GITHUB_STEP_SUMMARY"
+          else
+            msg="Video step did not complete: install $DEPS, render $RENDER, upload $UPLOAD. The note itself is unaffected."
+            echo "::warning::$msg"
+            echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+          fi
