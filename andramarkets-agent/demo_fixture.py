@@ -59,6 +59,11 @@ STOCKS = {
     "NFLX": 1284, "AMD": 186, "CRM": 268, "ORCL": 242, "BAC": 52.4,
     "GS": 786, "MS": 148, "CVX": 156, "PFE": 26.8, "KO": 71.2,
 }
+# Drawn after everything else, from their own generator, so the rest of the
+# fixture is the same series it was before the FX analysis was added.
+FX_MORE = {"nzdusd": (0.5842, .0050), "usdkrw": (1386.40, .0045),
+           "usdzar": (17.62, .0068)}
+POLICY = {"fedupper": 4.00, "fedlower": 3.75, "ecbdfr": 2.00}
 INVERSE = {"vix", "vix9d", "vix3m", "vvix", "move", "vstoxx", "rvx"}
 
 
@@ -70,6 +75,8 @@ def synthetic_frame(asof: dt.date | None = None, seed: int = 20260819) -> Market
 
     data = {}
     for ins in all_instruments():
+        if ins.key in FX_MORE or ins.key in POLICY:
+            continue
         level, vol = LEVELS.get(ins.key, (None, None))
         if level is None:
             level, vol = STOCKS.get(ins.ticker, 100.0), 0.016
@@ -93,6 +100,14 @@ def synthetic_frame(asof: dt.date | None = None, seed: int = 20260819) -> Market
              + curv[:, None] * load_c[None, :])
     for j, k in enumerate(tenor_keys):
         data[k] = curve[:, j]
+
+    fx_rng = np.random.default_rng(seed + 1)
+    for k, (level, vol) in FX_MORE.items():
+        r = fx_rng.normal(0, vol, len(idx))
+        data[k] = level * np.exp(np.cumsum(r) - np.cumsum(r)[-1])
+    # Policy rates step, they do not drift: one 25bp cut 40 sessions ago.
+    for k, rate in POLICY.items():
+        data[k] = np.where(np.arange(len(idx)) < len(idx) - 40, rate + 0.25, rate)
 
     px = pd.DataFrame(data, index=idx)
     return MarketFrame(px=px, snap=snapshot(px), asof=asof, missing=[])
@@ -197,4 +212,111 @@ def demo_note() -> Note:
         "premium. Credit spreads held. Sector dispersion stayed wide. Both of "
         "those say rotation, not panic. The 10-year is the level that decides "
         "what happens next.",
+    }, audit_ok=True)
+
+
+# Central banks for the demo, in the shape of central_banks.json. Synthetic
+# like the rest of the fixture: these are not anyone's actual policy rates.
+def demo_banks(asof: dt.date) -> dict:
+    nxt = lambda days: (asof + dt.timedelta(days=days)).isoformat()  # noqa: E731
+    b = lambda bank, short, rate, move, days: {  # noqa: E731
+        "bank": bank, "short": short, "rate_name": "Policy rate", "rate": rate,
+        "last_decision": (asof - dt.timedelta(days=30)).isoformat(),
+        "last_change_bp": move, "next_meeting": nxt(days), "source": "demo",
+        "verified": True}
+    return {
+        "USD": b("Federal Reserve", "Fed", None, None, 6),
+        "EUR": b("European Central Bank", "ECB", None, None, 7),
+        "JPY": b("Bank of Japan", "BoJ", 0.75, 25, 8),
+        "GBP": b("Bank of England", "BoE", 3.75, -25, 14),
+        "CHF": b("Swiss National Bank", "SNB", 0.0, 0, 48),
+        "CAD": b("Bank of Canada", "BoC", 2.50, 0, 6),
+        "AUD": b("Reserve Bank of Australia", "RBA", 3.60, 0, 12),
+        "NZD": b("Reserve Bank of New Zealand", "RBNZ", 2.75, -25, 6),
+        "CNY": b("People's Bank of China", "PBoC", 1.40, 0, 30),
+        "MXN": b("Banco de Mexico", "Banxico", 7.25, -25, 28),
+        "BRL": b("Banco Central do Brasil", "BCB", 14.25, 0, 40),
+        "INR": b("Reserve Bank of India", "RBI", 5.50, 0, 45),
+        "KRW": b("Bank of Korea", "BoK", 2.50, 0, 21),
+        "ZAR": b("South African Reserve Bank", "SARB", 7.00, -25, 27),
+        # Its meeting has come: the entry is left out as out of date.
+        "TRY": {**b("Central Bank of the Republic of Turkiye", "CBRT", 39.5, -100, 0)},
+    }
+
+
+def demo_fx_note(facts: dict) -> Note:
+    """The FX note for demo runs. The prose carries no figure; the levels
+    lines are set from the demo fact pack, so the figure check runs on them."""
+    from andra.fx import level_lines
+    return Note({
+        "headline": "Dollar eases as the rand and the euro lead and the kiwi lags",
+        "standfirst": ("The dollar index closed lower on the day, the week and the "
+                       "month while the US 2-year yield barely moved, so the front end "
+                       "was not the driver. The rand and the euro led the gains against "
+                       "the dollar, and the New Zealand dollar was the weakest currency "
+                       "on the board."),
+        "takeaways": [
+            "The dollar's decline came with a flat US 2-year yield, so the rate "
+            "data offers no explanation for the session.",
+            "The euro was the strongest major on the day and recovered most of "
+            "its loss on the month over the past week.",
+            "The New Zealand dollar moved against the trend and is the weakest "
+            "major over the month.",
+            "In emerging markets the rand and the won gained while the real, the "
+            "yuan and the rupee slipped, a split that cuts across regions.",
+        ],
+        "dollar": "The dollar index finished lower and extended losses that now "
+        "run across the week and the month. The US 2-year yield ended the session "
+        "almost unchanged, so the front end is not the explanation the data offers "
+        "today. The decline was broad among the majors: only sterling, the Canadian "
+        "dollar and the New Zealand dollar lost ground to the dollar.\n\n"
+        "The index closed below its 50-day and 200-day averages and sits closer to "
+        "its 52-week low than to its high. That places the session inside an "
+        "established decline rather than at the start of a new one. Without a move "
+        "in US rates to anchor it, the dollar's direction came from the other side "
+        "of each pair.",
+        "majors": "EUR/USD led the majors higher and recovered most of its loss on "
+        "the month over the past week. The ECB's deposit rate sits below the top of "
+        "the Fed's range and neither moved, so the gain came without help from the "
+        "policy differential. The pair closed just below its 50-day average, which "
+        "frames the session as a move within a range rather than out of one.\n\n"
+        "The Swiss franc and the yen also gained on the dollar. The franc is the "
+        "strongest major over the month, in line with its role as a funding and "
+        "haven currency. USD/JPY closed near its 1-month high despite the day's dip, "
+        "so the yen's gain was small against a month of weakness.\n\n"
+        "The New Zealand dollar went the other way. It was the weakest currency on "
+        "the session, is the weakest major over the month and lost ground on the "
+        "week as well. The Australian dollar rose on the day, so the move was "
+        "specific to New Zealand rather than to the commodity bloc, with the RBNZ "
+        "meeting inside the next week. Sterling and the Canadian dollar slipped "
+        "against the dollar.",
+        "em": "Emerging currencies split across regions rather than along them. "
+        "The rand was the strongest currency in the pack on the day, and USD/ZAR "
+        "closed below its 50-day average. The won also gained. In Latin America the "
+        "Mexican peso firmed on the session but remains the weakest currency in the "
+        "pack over the month, while the Brazilian real slipped on the day after a "
+        "stronger month.\n\n"
+        "In Asia the yuan and the rupee weakened against the dollar, and USD/CNY "
+        "stayed inside its 1-month range. The Turkish lira was little changed. Over "
+        "the week every EM currency in the pack lost ground to the dollar, so the "
+        "session's gains in the rand and the won ran against the recent trend.",
+        "drivers": "The rate side was quiet. The US 2-year closed almost unchanged "
+        "and no central bank in the pack moved today, so the policy differentials "
+        "that frame the majors were the same at the close as at the open. The euro, "
+        "the franc and the yen all carry policy rates below the Fed's, and all three "
+        "gained, which says the dollar's weakness came from flows the rate data does "
+        "not capture.\n\n"
+        "Among the high-yielders the differential to the Fed is widest for the real "
+        "and then the peso, and the two went in opposite directions on the session. "
+        "Over the month the real, with the larger carry, gained while the peso fell "
+        "the most. The correlation of each pair with the US 2-year over the last 60 "
+        "sessions is close to zero across the board, which fits a month in which "
+        "the front end explained little of what currencies did. The Turkish central "
+        "bank's entry is out of date after its meeting and is left out.",
+        "levels": level_lines(facts),
+        "ahead": "The Fed, the Bank of Canada and the Reserve Bank of New Zealand "
+        "meet first, followed by the ECB and the Bank of Japan, and then the Reserve "
+        "Bank of Australia and the Bank of England. Each decision resets one side of "
+        "a differential that has explained little of this month's moves, so the "
+        "reaction to each will say as much as the decision itself.",
     }, audit_ok=True)

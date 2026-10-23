@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from .data import MarketFrame
+from .universe import BLOCKS
 
 # (key, field, sign). Sign is +1 when a rise means risk appetite.
 BAROMETER = [
@@ -89,7 +90,10 @@ def movers(mf: MarketFrame, block: str = "watchlist", n: int = 5) -> dict:
 
 
 def fresh_extremes(mf: MarketFrame, tol: float = 0.005) -> dict:
-    s = mf.snap
+    # The FX analysis's own pairs and policy rates are not part of the close
+    # note's universe.
+    s = mf.snap.drop([i.key for b in ("fx_more", "policy") for i in BLOCKS[b]],
+                     errors="ignore")
     if s.empty:
         return {"highs": [], "lows": []}
     return {"highs": s[s["last"] >= s["high52"] * (1 - tol)]["name"].tolist()[:10],

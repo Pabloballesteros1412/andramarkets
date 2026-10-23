@@ -14,6 +14,8 @@ Per run:
 | `tiktok_caption_YYYYMMDD.txt` | Caption plus voiceover script |
 | `facts_YYYYMMDD.json` | Verified fact pack. Traceability and archive |
 | `manifest_YYYYMMDD.json` | Edition, figure check result and rejected figures, writing mode, tokens, model and run time |
+| `AndraMarkets_FX_YYYYMMDD.pdf` | FX analysis, A4, 800 to 1,200 words: dollar, G10 majors, EM pairs, rate differentials, levels |
+| `fx_YYYYMMDD.json` | The FX analysis for the site's FX section: note sections plus its verified FX fact pack |
 
 ---
 
@@ -89,6 +91,8 @@ andra/
   data.py             ingestion, swappable provider, quality control
   analytics.py        risk score, breadth, curve, dispersion, correlation
   narrative.py        writing with Claude plus the figure audit
+  fx.py               FX analysis: FX fact pack, writer, site export
+  fx_render.py        FX analysis note
   weekly.py           weekly review: archive, sessions, weekly facts, writer
   weekly_render.py    weekly note and carousel
   charts.py           eleven exhibits on the house palette
@@ -118,6 +122,24 @@ numbers. Three passes enforce it:
 
 If the API is unreachable, `write_without_model()` publishes tables and
 exhibits with no prose. Short and correct beats fluent and unchecked.
+
+### FX analysis
+
+Every run also writes a daily FX note: the dollar index, the G10 majors
+(EUR, JPY, GBP, CHF, CAD, AUD, NZD against the dollar) and the main EM pairs
+(CNY, MXN, BRL, INR, KRW, ZAR, TRY), each with its daily, weekly and monthly
+move, the levels that matter (1-month and 52-week range, 50- and 200-day
+averages) and its central bank's rate against the Fed's. It goes through the
+same figure check as the close note, must be 800 to 1,200 words and is
+checked for trade language; a draft that fails goes back to the model with
+the reason. Its facts are saved in `facts_*.json` under `fx_analysis`, and
+the note with its facts in `fx_*.json`, which is archived with the PDF.
+
+Policy rates: the Fed and the ECB are read from FRED. Every other bank is
+read from `central_banks.json`, which you keep up to date: an entry is used
+only once `verified` is true, and it drops out on the day of its
+`next_meeting` until you update it. The email's pre-flight names the banks
+to update.
 
 ### Voice
 

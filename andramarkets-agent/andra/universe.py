@@ -121,6 +121,22 @@ FX = [
     I("usdinr", "USD/INR", "USDINR=X", dec=3),
 ]
 
+# Pairs read only by the FX analysis (andra/fx.py), kept out of the FX block
+# so the close note's tables and exhibits are unchanged.
+FX_MORE = [
+    I("nzdusd", "NZD/USD", "NZDUSD=X", dec=4),
+    I("usdkrw", "USD/KRW", "KRW=X"),
+    I("usdzar", "USD/ZAR", "ZAR=X", dec=4),
+]
+
+# Policy rates FRED publishes daily. Every other central bank is read from
+# central_banks.json (andra/fx.py).
+POLICY = [
+    I("fedupper", "Fed funds target, upper bound", "DFEDTARU", "fred", "pct"),
+    I("fedlower", "Fed funds target, lower bound", "DFEDTARL", "fred", "pct"),
+    I("ecbdfr", "ECB deposit facility rate", "ECBDFR", "fred", "pct"),
+]
+
 COMMODITIES = [
     I("wti", "WTI crude", "CL=F", summary="macro"),
     I("brent", "Brent crude", "BZ=F"),
@@ -163,6 +179,7 @@ BLOCKS: dict[str, list[Instrument]] = {
     "breakevens": BREAKEVENS, "sovereigns": SOVEREIGNS, "credit": CREDIT,
     "fx": FX, "commodities": COMMODITIES, "volatility": VOLATILITY,
     "digital": DIGITAL, "watchlist": WATCHLIST,
+    "fx_more": FX_MORE, "policy": POLICY,
 }
 
 
