@@ -152,3 +152,65 @@ def test_check_on_a_day_nyse_did_not_trade_does_nothing(fake, monkeypatch):
     monkeypatch.setattr(s, "todays_session", lambda now: None)
     monitor.check(REPO, None, dry=False)
     assert f.posted == []
+
+
+def man(date, run, tin=20000, tout=3000, model=40.0, total=90.0):
+    return {"date": date, "run": str(run), "tokens": {"input": tin, "output": tout},
+            "model_seconds": model, "run_seconds": total}
+
+
+BASE = [man(f"2026-10-{d:02d}", d) for d in (5, 6, 8, 9, 12, 13, 14, 15, 16, 19, 20, 21, 22)]
+
+
+def test_quiet_week_has_no_summary():
+    rows = BASE + [man("2026-10-26", 100), man("2026-10-30", 101, model=79.0)]
+    assert monitor.cost_summary(rows, dt.date(2026, 10, 30)) is None
+
+
+def test_a_run_over_twice_the_median_is_summarised():
+    rows = BASE + [man("2026-10-26", 100), man("2026-10-29", 101, tout=16000, model=130.0)]
+    s = monitor.cost_summary(rows, dt.date(2026, 10, 30))
+    assert "week ending 2026-10-30" in s
+    assert "2026-10-29 (run 101): output tokens 16,000, 5.3x the median of 3,000" in s
+    assert "model time, s 130, 3.2x" in s
+    assert "input tokens" in s and "run 100" not in s
+
+
+def test_baseline_is_the_four_weeks_before_only():
+    # A heavy run five weeks back does not move the median; one this week
+    # does not count in its own baseline.
+    rows = [man("2026-09-25", 1, tout=90000)] + BASE + [man("2026-10-29", 2, tout=6001)]
+    assert "output tokens 6,001" in monitor.cost_summary(rows, dt.date(2026, 10, 30))
+
+
+def test_too_little_history_flags_nothing():
+    rows = BASE[:3] + [man("2026-10-29", 2, tout=60000)]
+    assert monitor.cost_summary(rows, dt.date(2026, 10, 30)) is None
+
+
+def test_manifests_without_metrics_are_ignored():
+    rows = [{"date": "2026-10-22", "run": "1", "audit_ok": True}] + BASE[:2]
+    assert monitor.cost_summary(rows, dt.date(2026, 10, 23)) is None
+
+
+def test_friday_summary_goes_into_the_missed_note_issue(fake, monkeypatch):
+    f = fake(runs=[])
+    monkeypatch.setattr(monitor, "weekly", lambda repo, d: "### Cost and timing, week ending x")
+    monitor.check(REPO, dt.date(2026, 10, 23), dry=False)
+    (path, args), = f.posted
+    assert "title=Missed close note: 2026-10-23" in args
+    assert any("### Cost and timing" in a for a in args)
+
+
+def test_friday_summary_alone_gets_its_own_issue(fake, monkeypatch):
+    f = fake(produced=True)
+    monkeypatch.setattr(monitor, "weekly", lambda repo, d: "### Cost and timing")
+    monitor.check(REPO, dt.date(2026, 10, 23), dry=False)
+    (path, args), = f.posted
+    assert "title=Run monitoring: week ending 2026-10-23" in args
+
+
+def test_other_days_never_read_the_manifests(fake, monkeypatch):
+    fake(produced=True)
+    monkeypatch.setattr(monitor, "weekly", lambda *a: pytest.fail("read on a Wednesday"))
+    monitor.check(REPO, dt.date(2026, 10, 21), dry=False)

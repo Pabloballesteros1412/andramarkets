@@ -46,3 +46,23 @@ def test_reply_missing_sections_is_retried(monkeypatch):
 def test_never_complete_raises_so_the_run_falls_back(monkeypatch):
     with pytest.raises(RuntimeError):
         run(monkeypatch, [reply(FULL[:300], stop="max_tokens")] * 3)
+
+
+def _with_usage(r, i, o):
+    r.usage = types.SimpleNamespace(input_tokens=i, output_tokens=o)
+    return r
+
+
+def test_usage_counts_every_call_including_failed_attempts(monkeypatch):
+    note = run(monkeypatch, [_with_usage(reply(FULL[:200], stop="max_tokens"), 1000, 16000),
+                             _with_usage(reply(FULL), 1100, 900)])
+    assert note.usage["calls"] == 2
+    assert note.usage["input_tokens"] == 2100 and note.usage["output_tokens"] == 16900
+    assert note.usage["model_seconds"] >= 0
+
+
+def test_usage_survives_a_writer_that_gives_up(monkeypatch):
+    bad = [_with_usage(reply("no tags here"), 10, 5) for _ in range(3)]
+    with pytest.raises(RuntimeError) as e:
+        run(monkeypatch, bad)
+    assert e.value.usage["calls"] == 3 and e.value.usage["output_tokens"] == 15
