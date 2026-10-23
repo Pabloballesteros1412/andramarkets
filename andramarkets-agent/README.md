@@ -53,6 +53,13 @@ went out stops on the dedup marker. A manual run can still catch up a missed
 session. Run workflow
 still works by hand; tick resend to send a session again.
 
+**Monitoring.** The Run monitoring workflow opens an issue titled
+"Missed close note: <date>" when a scheduled run fails (with the failed step
+and the end of its log), and at 22:45 UTC on any NYSE trading day whose note
+is not in the archive by then. One issue per date; it is closed on its own if
+the note comes out after all. No email. `python monitor.py check --date
+YYYY-MM-DD --dry-run` prints what it would post.
+
 ---
 
 ## 3 · Layout
