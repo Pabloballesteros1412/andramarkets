@@ -13,7 +13,7 @@ Per run:
 | `linkedin_caption_YYYYMMDD.txt` | Caption, ready to paste |
 | `tiktok_caption_YYYYMMDD.txt` | Caption plus voiceover script |
 | `facts_YYYYMMDD.json` | Verified fact pack. Traceability and archive |
-| `manifest_YYYYMMDD.json` | Edition, figure check result and rejected figures, writing mode |
+| `manifest_YYYYMMDD.json` | Edition, figure check result and rejected figures, writing mode, tokens, model and run time |
 
 ---
 
@@ -59,6 +59,12 @@ and the end of its log), and at 22:45 UTC on any NYSE trading day whose note
 is not in the archive by then. One issue per date; it is closed on its own if
 the note comes out after all. No email. `python monitor.py check --date
 YYYY-MM-DD --dry-run` prints what it would post.
+
+**Cost and timing.** Each manifest records the model's input and output
+tokens across every call of the note (failed attempts included), the time
+spent waiting on the model, and the run's wall time. On Fridays the monitor
+compares the week's runs with the median of the four weeks before and adds a
+short summary to the monitoring issue when anything is over twice its median.
 
 ---
 

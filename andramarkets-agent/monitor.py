@@ -4,6 +4,7 @@
     python monitor.py failed-run RUN_ID     a scheduled daily run failed
     python monitor.py check                 22:45 UTC: is today's note there?
     python monitor.py check --date 2026-10-21 --dry-run
+    python monitor.py weekly --date 2026-10-23 --dry-run
 
 Two ways a note goes missing, one issue title for both, "Missed close note:
 <session date>", so a day never gets two issues:
@@ -16,6 +17,12 @@ Two ways a note goes missing, one issue title for both, "Missed close note:
               day's runs and, if one failed, its failed step and log. A day
               whose note did come out after an earlier failure has its issue
               closed with a comment saying which run produced it.
+
+On Fridays the check also reads the week's run manifests (tokens, model
+time, run time) and, if any run used more than twice the median of the four
+weeks before, adds a short summary to the monitoring issue: the day's
+"Missed close note" issue if there is one, otherwise an issue of its own,
+"Run monitoring: week ending <date>". A quiet week posts nothing.
 
 A note counts as produced when the session's archive release
 (archive-YYYY-MM-DD) holds a report PDF. Nothing is emailed. Runs inside
@@ -42,6 +49,18 @@ log = logging.getLogger("andra.monitor")
 NY = ZoneInfo("America/New_York")
 WORKFLOW = "daily-close.yml"
 TITLE = "Missed close note: {date}"
+WEEKLY_TITLE = "Run monitoring: week ending {date}"
+# (label, how to read it from a manifest). Manifests from before 23 Oct 2026
+# carry none of these and are left out.
+METRICS = (
+    ("input tokens", lambda m: (m.get("tokens") or {}).get("input")),
+    ("output tokens", lambda m: (m.get("tokens") or {}).get("output")),
+    ("model time, s", lambda m: m.get("model_seconds")),
+    ("run time, s", lambda m: m.get("run_seconds")),
+)
+BASELINE_WEEKS = 4
+MIN_BASELINE = 5      # runs needed before a median means anything
+_MANIFEST = re.compile(r"manifest_(\d{8})_r(\d+)\.json")
 EXCERPT_LINES = 40
 _STAMP = re.compile(r"^\d{4}-\d\d-\d\dT[\d:.]+Z ")
 
@@ -188,6 +207,88 @@ def session_of_run(run: dict) -> dt.date:
     return last_completed(end_of_day)
 
 
+# ------------------------------------------------------------ cost, timing
+def manifests(repo: str, start: dt.date, end: dt.date) -> list[dict]:
+    """Every archived non-demo manifest for sessions start..end, with
+    `date` and `run` filled in."""
+    out = []
+    for page in range(1, 4):
+        rels = _api(f"repos/{repo}/releases?per_page=100&page={page}") or []
+        for rel in rels:
+            tag = rel.get("tag_name", "")
+            if not tag.startswith("archive-"):
+                continue
+            try:
+                day = dt.date.fromisoformat(tag[len("archive-"):])
+            except ValueError:
+                continue
+            if not start <= day <= end:
+                continue
+            for a in rel.get("assets", []):
+                m = _MANIFEST.fullmatch(a["name"])
+                if not m:
+                    continue
+                man = _api(f"repos/{repo}/releases/assets/{a['id']}",
+                           "-H", "Accept: application/octet-stream", check=False)
+                if isinstance(man, dict) and not man.get("demo"):
+                    out.append({**man, "date": day.isoformat(), "run": m.group(2)})
+        if len(rels) < 100:
+            break
+    return out
+
+
+def _median(xs: list[float]) -> float:
+    xs = sorted(xs)
+    n = len(xs)
+    return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
+
+
+def cost_summary(rows: list[dict], end: dt.date) -> str | None:
+    """A short summary of the week ending `end` if any run used more than
+    twice its metric's median over the four weeks before; None otherwise."""
+    monday = end - dt.timedelta(days=end.weekday())
+    base_from = monday - dt.timedelta(weeks=BASELINE_WEEKS)
+    week = [r for r in rows if monday.isoformat() <= r["date"] <= end.isoformat()]
+    base = [r for r in rows if base_from.isoformat() <= r["date"] < monday.isoformat()]
+
+    table, over = [], []
+    for label, get in METRICS:
+        hist = [float(v) for v in map(get, base) if v is not None]
+        now = [(r, float(get(r))) for r in week if get(r) is not None]
+        if not now:
+            continue
+        top = max(v for _, v in now)
+        if len(hist) < MIN_BASELINE:
+            table.append(f"| {label} | {top:,.0f} | n/a ({len(hist)} runs) | |")
+            continue
+        med = _median(hist)
+        hits = [(r, v) for r, v in now if med > 0 and v > 2 * med]
+        table.append(f"| {label} | {top:,.0f} | {med:,.0f} | "
+                     f"{'**over 2x**' if hits else ''} |")
+        over += [f"- {r['date']} (run {r['run']}): {label} {v:,.0f}, "
+                 f"{v / med:.1f}x the median of {med:,.0f}" for r, v in hits]
+    if not over:
+        return None
+    return "\n".join([
+        f"### Cost and timing, week ending {end}",
+        "",
+        f"{len(week)} run(s) this week against the median of {len(base)} run(s) "
+        f"from {base_from} to {monday - dt.timedelta(days=1)}.",
+        "",
+        "| metric | highest this week | 4-week median | |",
+        "|---|---|---|---|",
+        *table,
+        "",
+        "Over twice the median:",
+        *over,
+    ])
+
+
+def weekly(repo: str, end: dt.date) -> str | None:
+    start = end - dt.timedelta(days=end.weekday()) - dt.timedelta(weeks=BASELINE_WEEKS)
+    return cost_summary(manifests(repo, start, end), end)
+
+
 # -------------------------------------------------------------------- modes
 def on_failed_run(repo: str, run_id: str, dry: bool) -> int:
     run = _api(f"repos/{repo}/actions/runs/{run_id}")
@@ -217,9 +318,12 @@ def check(repo: str, date: dt.date | None, dry: bool) -> int:
         if date is None:
             log.info("No NYSE session closed today: nothing to check.")
             return 0
+    summary = weekly(repo, date) if date.weekday() == 4 else None
     if note_produced(repo, date):
         log.info("The %s note is in the archive.", date)
         close_recovered(repo, date, dry)
+        if summary:
+            post(repo, WEEKLY_TITLE.format(date=date), summary, dry)
         return 0
 
     runs = day_runs(repo, date)
@@ -240,6 +344,8 @@ def check(repo: str, date: dt.date | None, dry: bool) -> int:
             lines += ["", "Every run succeeded without producing a note: they "
                       "stopped early (before the close, or on the dedup marker). "
                       "Check the session date and `.last_published`."]
+    if summary:
+        lines += ["", summary]
     post(repo, TITLE.format(date=date), "\n".join(lines), dry)
     return 0
 
@@ -251,13 +357,23 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("run_id")
     c = sub.add_parser("check")
     c.add_argument("--date")
-    for p in (f, c):
+    w = sub.add_parser("weekly", help="the cost and timing summary alone")
+    w.add_argument("--date", required=True, help="last day of the week")
+    for p in (f, c, w):
         p.add_argument("--dry-run", action="store_true",
                        help="print the issue instead of posting it")
     args = ap.parse_args(argv)
     repo = _repo()
     if args.cmd == "failed-run":
         return on_failed_run(repo, args.run_id, args.dry_run)
+    if args.cmd == "weekly":
+        end = dt.date.fromisoformat(args.date)
+        summary = weekly(repo, end)
+        if summary:
+            post(repo, WEEKLY_TITLE.format(date=end), summary, args.dry_run)
+        else:
+            log.info("Week ending %s: nothing over twice its 4-week median.", end)
+        return 0
     return check(repo, dt.date.fromisoformat(args.date) if args.date else None,
                  args.dry_run)
 

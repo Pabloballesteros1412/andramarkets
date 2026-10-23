@@ -40,6 +40,7 @@ import logging
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from andra import render
@@ -87,6 +88,7 @@ def _mark_published(date: dt.date) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    started = time.monotonic()
     ap = argparse.ArgumentParser()
     ap.add_argument("--date")
     ap.add_argument("--demo", action="store_true")
@@ -170,6 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     # 2 · Writing
     facts = fact_pack(mf)
     mode = "model"
+    usage = None
     carried = []
     if replay and args.replay_data == "archive":
         carried = replay_mod.carry_over(facts, replay["facts"])
@@ -182,16 +185,22 @@ def main(argv: list[str] | None = None) -> int:
         from andra.narrative import write, write_without_model
         try:
             note = write(facts)
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
             # Log the full traceback. A one-line message is not enough to
             # diagnose a writer failure from a CI log.
             log.exception("Writer unavailable. Publishing in quantitative mode.")
             note = write_without_model(facts)
             mode = "quantitative"
+            usage = getattr(e, "usage", None)
         else:
             filled = sum(1 for v in note.content.values() if v)
             log.info("Note written: %d of %d sections filled.",
                      filled, len(note.content))
+    if usage is None:
+        usage = note.usage
+    log.info("Model: %d call(s), %d input and %d output tokens, %.1f s.",
+             usage["calls"], usage["input_tokens"], usage["output_tokens"],
+             usage["model_seconds"])
     log.info("Figure check: %s (%d attempts)",
              "passed" if note.audit_ok else f"FAILED {note.unsupported}", note.attempts)
 
@@ -226,14 +235,25 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(note.content, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     # What was only visible inside the PDF and the email subject: whether the
     # figure check passed, what it rejected, and how the note was written.
-    (out_dir / f"manifest_{stamp}.json").write_text(json.dumps({
+    # Cost and timing: every model call of the note (failed attempts
+    # included) and the run's wall time, from start to the files being
+    # written; rewritten once the email has gone. The Actions setup
+    # (fonts, dependencies) is not part of it.
+    manifest = {
         "date": date.isoformat(), "edition": edition,
         "audit_ok": note.audit_ok, "unsupported": note.unsupported,
         "attempts": note.attempts, "mode": mode,
         "demo": bool(args.demo or replay),
         **({"replay_of": str(args.replay), "replay_data": args.replay_data,
             "carried_from_archive": carried} if replay else {}),
-    }, ensure_ascii=False, indent=2), encoding="utf-8")
+        "tokens": {"input": usage["input_tokens"], "output": usage["output_tokens"]},
+        "model_calls": usage["calls"],
+        "model_seconds": usage["model_seconds"],
+        "run_seconds": round(time.monotonic() - started, 1),
+    }
+    manifest_file = out_dir / f"manifest_{stamp}.json"
+    manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2),
+                             encoding="utf-8")
     # 5-minute bars of the session for the video, or the last 60 daily
     # closes when they cannot be had (demo runs, a failed fetch). The interval
     # is saved so the video never draws daily closes as if they were intraday.
@@ -281,6 +301,9 @@ def main(argv: list[str] | None = None) -> int:
     send(li, tt, script, checks, [carousel, report, *stills], ctx,
          note.audit_ok, len(mf.missing), len(stills))
     log.info("Delivered to %s", os.environ["MAIL_TO"])
+    manifest["run_seconds"] = round(time.monotonic() - started, 1)
+    manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2),
+                             encoding="utf-8")
 
     if not args.force:
         _mark_published(date)

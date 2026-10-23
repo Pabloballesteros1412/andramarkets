@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass, field
 
 from .universe import all_instruments
@@ -140,6 +141,10 @@ class Note:
     audit_ok: bool = True
     unsupported: list[str] = field(default_factory=list)
     attempts: int = 1
+    # Every model call of the note, failed attempts included: input and
+    # output tokens and wall time spent waiting on the API.
+    usage: dict = field(default_factory=lambda: {
+        "input_tokens": 0, "output_tokens": 0, "model_seconds": 0.0, "calls": 0})
 
 
 # A figure is read whole: 7,747.71 and 7747.71 are one number. The old
@@ -275,7 +280,23 @@ def parse_reply(txt: str) -> dict:
     return out
 
 
-def _call(client, messages: list[dict]) -> dict:
+def _metered(meter: dict | None, create, **kwargs):
+    """client.messages.create, adding its tokens and time to meter."""
+    t0 = time.monotonic()
+    try:
+        r = create(**kwargs)
+    finally:
+        if meter is not None:
+            meter["model_seconds"] = round(meter["model_seconds"] + time.monotonic() - t0, 2)
+            meter["calls"] += 1
+    u = getattr(r, "usage", None)
+    if meter is not None and u is not None:
+        meter["input_tokens"] += int(getattr(u, "input_tokens", 0) or 0)
+        meter["output_tokens"] += int(getattr(u, "output_tokens", 0) or 0)
+    return r
+
+
+def _call(client, messages: list[dict], meter: dict | None = None) -> dict:
     # Writing a note from an already-computed fact pack does not need the
     # model to reason step by step, and leaving thinking at its default is
     # what broke production twice: the model spent its entire token budget
@@ -287,14 +308,14 @@ def _call(client, messages: list[dict]) -> dict:
     kwargs = dict(model=MODEL, max_tokens=MAX_TOKENS, system=SYSTEM,
                   messages=messages, thinking={"type": "disabled"})
     try:
-        r = client.messages.create(**kwargs)
+        r = _metered(meter, client.messages.create, **kwargs)
     except TypeError:
         kwargs.pop("thinking", None)
-        r = client.messages.create(**kwargs)
+        r = _metered(meter, client.messages.create, **kwargs)
     except Exception as e:  # noqa: BLE001
         if "thinking" in str(e).lower():
             kwargs.pop("thinking", None)
-            r = client.messages.create(**kwargs)
+            r = _metered(meter, client.messages.create, **kwargs)
         else:
             raise
 
@@ -349,9 +370,10 @@ def write(facts: dict, max_attempts: int = 3) -> Note:
     messages = [{"role": "user", "content": prompt}]
 
     content, bad, last_error = {}, [], None
+    usage = Note({}).usage
     for attempt in range(1, max_attempts + 1):
         try:
-            content = _call(client, messages)
+            content = _call(client, messages, usage)
         except Exception as e:  # noqa: BLE001
             last_error = e
             log.warning("Attempt %d failed to produce a usable reply: %s", attempt, e)
@@ -359,7 +381,7 @@ def write(facts: dict, max_attempts: int = 3) -> Note:
 
         bad = audit(content, facts)
         if not bad:
-            return Note(_complete(content), True, [], attempt)
+            return Note(_complete(content), True, [], attempt, usage)
 
         log.warning("Audit %d rejected figures: %s", attempt, bad)
         messages += [
@@ -372,8 +394,10 @@ def write(facts: dict, max_attempts: int = 3) -> Note:
         ]
 
     if content:
-        return Note(_complete(content), False, bad, max_attempts)
-    raise RuntimeError(f"no usable reply after {max_attempts} attempts: {last_error}")
+        return Note(_complete(content), False, bad, max_attempts, usage)
+    err = RuntimeError(f"no usable reply after {max_attempts} attempts: {last_error}")
+    err.usage = usage  # what the failed attempts cost, for the manifest
+    raise err
 
 
 def write_without_model(facts: dict) -> Note:
