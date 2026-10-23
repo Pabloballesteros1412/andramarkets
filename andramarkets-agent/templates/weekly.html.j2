@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Andra Markets · Weekly Review · {{ week_long }}</title>
+<style>{{ css }}
+.days{ display:grid; grid-template-columns:repeat(5,1fr); gap:3mm; margin-top:1.5mm; }
+.days div{ border-top:.4pt solid var(--rule); padding-top:1.4mm; font-size:7pt; }
+.days b{ display:block; font-size:9pt; color:var(--ink); }
+.ev{ font-size:7.1pt; }
+.ev-row{ display:grid; grid-template-columns:17mm 1fr 20mm 24mm; gap:2mm; padding:1.2mm 0;
+  border-bottom:.3pt solid var(--rule); }
+.ev-row span:nth-child(3),.ev-row span:nth-child(4){ text-align:right; }
+.ev-head{ font-size:5.9pt; font-weight:600; letter-spacing:.11em; text-transform:uppercase; color:var(--muted); }
+</style></head><body>
+
+{% macro wtbl(rows, head="Instrument") -%}
+<table><thead><tr><th>{{ head }}</th><th>Close</th><th>Week</th><th>YTD</th></tr></thead><tbody>
+{% for r in rows %}<tr>
+  <td>{{ r.name }}</td>
+  <td>{{ r.last | lvl(r.dec, r.unit) }}</td>
+  <td class="{{ r.chg | dir }}">{{ r.chg | chg(r.unit) }}</td>
+  <td class="{{ r.ytd | dir }}">{{ r.ytd | chg(r.unit) }}</td>
+</tr>{% endfor %}
+</tbody></table>
+{%- endmacro %}
+
+{% macro sec(num, title, note="") -%}
+<div class="sec-head"><span class="sec-num">{{ num }}</span>
+  <span class="sec-title">{{ title }}</span>
+  {% if note %}<span class="sec-note">{{ note }}</span>{% endif %}</div>
+{%- endmacro %}
+
+{% macro exh(no, title, img, src) -%}
+<figure><div class="ex-head"><div class="ex-no">Exhibit {{ no }}</div>
+  <div class="ex-title">{{ title }}</div></div>
+  <img src="{{ img }}" alt=""><div class="ex-src">{{ src }}</div></figure>
+{%- endmacro %}
+
+{% macro events(rows, label) -%}
+<div class="ev">
+  <div class="ev-row ev-head"><span>Day</span><span>{{ label }}</span><span>Previous</span><span>Actual</span></div>
+  {% for e in rows %}
+  <div class="ev-row"><span>{{ e.date[5:] }}</span><span>{{ e.title }} <span style="color:var(--muted)">· {{ e.country }}</span></span>
+    <span>{{ e.previous }}</span><span>{{ e.actual }}{% if e.reaction %} · {{ e.reaction }}{% endif %}</span></div>
+  {% endfor %}
+</div>
+{%- endmacro %}
+
+<div class="page">
+  <div class="rule-top"></div>
+  <div class="runhead">
+    <div class="mark">Andra Markets</div>
+    <div class="runhead-meta">Global Markets Research<br>Weekly review · {{ week_span }}</div>
+  </div>
+
+  <div class="eyebrow"><b>Weekly Market Review</b><span>{{ week_long }}</span><span>{{ edition }}</span></div>
+  <h1>{{ n.headline }}</h1>
+  <p class="standfirst">{{ n.standfirst }}</p>
+  <div class="byline"><span>Andra Markets Research Desk</span><span>Week to the close of {{ last_session }} · Published {{ published }}</span></div>
+
+  <div class="section first">
+    {{ sec("1.0", "The week in markets", "Close and change on the week") }}
+    <div class="g-11">
+      <div>{{ wtbl(summary) }}</div>
+      <div><h4 class="t">Key takeaways</h4>
+        <ol class="takeaways">{% for k in n.takeaways %}<li>{{ k }}</li>{% endfor %}</ol>
+        {% if days %}<h4 class="t" style="margin-top:3mm">S&amp;P 500 day by day</h4>
+        <div class="days">{% for d in days %}<div>{{ d.day }}<b>{{ d.last }}</b><span class="{{ d.dir }}">{{ d.chg }}</span></div>{% endfor %}</div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    {{ sec("2.0", "Equities", "Indices and sectors on the week") }}
+    <div class="g-2">
+      <div>{% if ex.indices %}{{ exh(1, "Equity indices, change on the week", ex.indices, "Percent. Last close of the week against the previous week's. Source: Andra Markets.") }}{% endif %}</div>
+      <div>{% if ex.sectors %}{{ exh(2, "S&P 500 sectors, change on the week", ex.sectors, "Percent. Source: Andra Markets.") }}{% endif %}
+        {% for p in (n.narrative or "").split("\n\n")[:1] if p %}<p style="margin-top:3mm">{{ p }}</p>{% endfor %}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="g-3">
+      <div>{{ wtbl(t.us_equity, "United States") }}</div>
+      <div>{{ wtbl(t.europe, "Europe") }}</div>
+      <div>{{ wtbl(t.apac + t.americas, "Asia-Pacific · Americas") }}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    {{ sec("3.0", "Rates, credit and currencies") }}
+    <div class="g-3">
+      <div>{{ wtbl(t.treasury_curve, "Treasury") }}{{ wtbl(t.breakevens, "Inflation") }}</div>
+      <div>{{ wtbl(t.credit, "Credit") }}</div>
+      <div>{{ wtbl(t.fx, "Pair") }}</div>
+    </div>
+    {% for p in (n.narrative or "").split("\n\n")[1:2] if p %}<p style="margin-top:3mm">{{ p }}</p>{% endfor %}
+  </div>
+
+  <div class="section">
+    {{ sec("4.0", "Commodities, volatility and digital assets") }}
+    <div class="g-3">
+      <div>{{ wtbl(t.commodities, "Contract") }}</div>
+      <div>{{ wtbl(t.volatility, "Index") }}</div>
+      <div>{{ wtbl(t.digital, "Asset") }}
+        {% for p in (n.narrative or "").split("\n\n")[2:] if p %}<p style="margin-top:3mm">{{ p }}</p>{% endfor %}</div>
+    </div>
+  </div>
+
+  {% if macro or earnings %}
+  <div class="section">
+    {{ sec("5.0", "Macro releases and earnings", "From the Andra Markets calendar") }}
+    {% if n.macro %}<p>{{ n.macro }}</p>{% endif %}
+    <div class="g-2" style="margin-top:2mm">
+      <div>{% if macro %}{{ events(macro, "High-importance releases") }}{% endif %}</div>
+      <div>{% if earnings %}{{ events(earnings, "Earnings, EPS and first session") }}{% endif %}</div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if ahead %}
+  <div class="section">
+    {{ sec("6.0", "The week ahead", "High importance · all times ET") }}
+    {% if n.week_ahead %}<p>{{ n.week_ahead }}</p>{% endif %}
+    <div class="cal" style="margin-top:2mm">
+      <div class="cal-row cal-head"><span>Day</span><span>Event</span><span>Time</span><span>Previous</span></div>
+      {% for c in ahead %}
+      <div class="cal-row"><span class="t">{{ c.date[5:] }}</span><span>{{ c.title }} · {{ c.country }}</span>
+        <span>{{ c.time }}</span><span>{{ c.previous }}</span></div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="section">
+    {{ sec("7.0", "Methodology") }}
+    <p style="font-size:6.8pt">Every figure comes from the daily close notes'
+    verified fact packs. A weekly change is the last close of the week against
+    the last close of the previous week ({{ prior_close or "n/a" }}, {{ prior_close_from }});
+    rates and breakevens are in basis points. Markets outside the US are taken at
+    their last close available to the daily note.
+    {% if missing %} No daily note was archived for {{ missing | join(", ") }}; the
+    day-by-day figures leave {{ "it" if missing|length == 1 else "them" }} out and the
+    weekly change is unaffected.{% endif %}
+    {% if left_out %} Left out because their prints do not chain from one daily
+    note to the next (the provider revised or mixed up the series during the
+    week): {{ left_out | join(", ") }}.{% endif %}
+    {% if calendar_source %} Macro releases, earnings and next week's events are read
+    from the Andra Markets economic calendar.{% else %} The economic calendar could
+    not be read for this edition, so it carries no releases, earnings or
+    week-ahead events.{% endif %}
+    Every figure in the text passes the same automated trace check as the daily
+    note before the review is released.</p>
+  </div>
+
+  <div class="legal">
+    <b>Disclaimer.</b> This document is produced by Andra Markets for information
+    only. It is not investment advice, a personal recommendation, or an offer or
+    solicitation to buy or sell any financial instrument, and it does not take
+    account of the objectives, financial situation or needs of any recipient.
+    Data is drawn from sources believed to be reliable; accuracy and completeness
+    are not guaranteed. Past performance does not predict future returns and all
+    investment carries risk of loss of capital. No part of this document may be
+    reproduced without written permission.
+    {% if not audit_ok %}<br><b>Control note.</b> This edition did not fully pass
+    the automated figure check. Review the flagged sections before distribution.{% endif %}
+  </div>
+  <div class="foot"><span>Andra Markets · Global Markets Research</span>
+    <span>Weekly review · {{ date_short }}</span><span>{{ edition }}</span></div>
+</div>
+</body></html>

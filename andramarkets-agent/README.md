@@ -66,6 +66,18 @@ spent waiting on the model, and the run's wall time. On Fridays the monitor
 compares the week's runs with the median of the four weeks before and adds a
 short summary to the monitoring issue when anything is over twice its median.
 
+**Weekly review.** The Weekly review workflow runs on Friday at 23:13 UTC,
+after both daily firings, and can be run by hand for any week. It reads the
+week's archived daily fact packs (no new market data), works out which
+session each archived run was really for, and computes each instrument's
+move from the previous week's last close to this week's. It adds the week's
+macro releases, earnings and next week's events from the site's economic
+calendar when the calendar can be read. The review is written under the same
+figure check as the daily note and printed as `AndraMarkets_Weekly_*.pdf`
+plus a LinkedIn carousel. `python weekly_run.py --week-ending 2026-10-16
+--no-mail` builds one locally (`GH_TOKEN` to fetch the archive, or `--from` a
+folder of facts files).
+
 ---
 
 ## 3 · Layout
@@ -77,6 +89,8 @@ andra/
   data.py             ingestion, swappable provider, quality control
   analytics.py        risk score, breadth, curve, dispersion, correlation
   narrative.py        writing with Claude plus the figure audit
+  weekly.py           weekly review: archive, sessions, weekly facts, writer
+  weekly_render.py    weekly note and carousel
   charts.py           eleven exhibits on the house palette
   render.py           HTML/CSS to PDF and PNG via Chromium
   social.py           captions, Unicode emphasis, pre-flight checks

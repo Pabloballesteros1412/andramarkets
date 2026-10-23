@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><style>{{ social_css }}
+@page{ size:1200px 1500px; margin:0; } html,body{ width:1200px; }
+</style></head><body class="li">
+
+<!-- 01 · COVER -->
+<div class="f ink">
+  <div class="rh"><span>Andra Markets</span><span>{{ week_span }}</span></div>
+  <div class="hair" style="margin-top:26px"></div>
+  <div style="margin-top:110px">
+    <div class="lbl muted" style="margin-bottom:34px">Weekly market review</div>
+    <div class="dsp" style="max-width:1000px">{{ n.headline }}</div>
+  </div>
+  {% if ex.spx_line %}
+  <div class="lbl muted" style="position:absolute;left:80px;bottom:352px">S&amp;P 500 · the week's closes</div>
+  <div class="bleed-wrap" style="bottom:0;height:300px">
+    <img class="bleed" src="{{ ex.spx_line }}" style="height:300px;object-fit:fill">
+  </div>{% endif %}
+</div>
+
+{% if hero %}
+<!-- 02 · THE NUMBER -->
+<div class="f">
+  <div class="rh muted"><span>{{ hero.label }}</span><span></span></div>
+  <div class="stack" style="margin-bottom:40px">
+    <div class="fig {{ hero.dir }}" style="margin-left:-14px">{{ hero.value }}</div>
+    <div class="hair" style="margin:44px 0 34px 0"></div>
+    <p style="max-width:820px">{{ hero.note }}</p>
+  </div>
+  <div class="pg">02</div>
+</div>
+{% endif %}
+
+{% if days %}
+<!-- 03 · DAY BY DAY -->
+<div class="f ink">
+  <div class="lbl muted">S&amp;P 500</div>
+  <div class="dsp sm" style="margin:30px 0 50px 0">Day by day</div>
+  {% for d in days %}
+  <div class="row"><span class="n">{{ d.day }}</span>
+    <span><span class="v">{{ d.last }}</span>
+    <span class="d {{ d.dir }}" style="margin-left:20px">{{ d.chg }}</span></span></div>
+  {% endfor %}
+  <div class="pg">03</div>
+</div>
+{% endif %}
+
+{% if sectors %}
+<!-- 04 · SECTORS -->
+<div class="f">
+  <div class="lbl muted">Sector rotation</div>
+  <div class="dsp sm" style="margin:30px 0 54px 0">The week by sector</div>
+  <div class="bars">
+    {% for b in sectors %}
+    <div class="bar-row">
+      <div class="bar-name">{{ b.name }}</div>
+      <div class="bar-track"><div class="bar-zero"></div>
+        <div class="bar-fill {{ b.dir }}" style="width:{{ b.width }}%;{{ b.side }}:50%;background:currentColor"></div>
+      </div>
+      <div class="bar-val {{ b.dir }}">{{ b.value }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="pg">04</div>
+</div>
+{% endif %}
+
+<!-- 05 · TAPE -->
+<div class="f ink">
+  <div class="lbl muted">Across the board</div>
+  <div class="dsp sm" style="margin:30px 0 50px 0">Where the week settled</div>
+  {% for r in tape %}
+  <div class="row"><span class="n">{{ r.name }}</span>
+    <span><span class="v">{{ r.last }}</span>
+    <span class="d {{ r.dir }}" style="margin-left:20px">{{ r.chg }}</span></span></div>
+  {% endfor %}
+  <div class="pg">05</div>
+</div>
+
+{% if n.takeaways %}
+<!-- 06 · PULL -->
+<div class="f field">
+  <div class="lbl muted">Takeaway</div>
+  <div class="stack" style="margin-bottom:70px">
+    <div class="say" style="max-width:930px">{{ n.takeaways[0] }}</div>
+  </div>
+  <div class="pg">06</div>
+</div>
+{% endif %}
+
+{% if ahead %}
+<!-- 07 · WEEK AHEAD -->
+<div class="f">
+  <div class="lbl muted">Next week</div>
+  <div class="dsp sm" style="margin:30px 0 50px 0">What we are watching</div>
+  {% for c in ahead[:6] %}
+  <div class="row"><span class="n">{{ c.date[5:] }}</span><span style="font-size:31px;font-weight:600;text-align:right;max-width:820px">{{ c.title }}</span></div>
+  {% endfor %}
+  <div class="pg">07</div>
+</div>
+{% endif %}
+
+<!-- 08 · END CARD -->
+<div class="f ink">
+  <div class="lbl muted">The week</div>
+  <div class="stack" style="margin-bottom:90px">
+    <p style="max-width:960px;font-size:34px;line-height:1.44">{{ n.standfirst }}</p>
+  </div>
+  <div>
+    <div class="mark">Andra Markets</div>
+    <p class="muted" style="margin-top:22px;font-size:24px;max-width:860px">
+      Every week. Information only, not investment advice.</p>
+  </div>
+</div>
+</body></html>
