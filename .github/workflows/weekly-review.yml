@@ -1,0 +1,75 @@
+name: Weekly review
+
+# The weekly market review: built on Friday after the US close from the
+# week's archived daily fact packs and the site's economic calendar, in the
+# house style of the daily note, plus a LinkedIn carousel. Same figure check
+# as the daily note. Friday 23:13 UTC is after both daily close firings
+# (20:30 and 21:30 UTC) have archived the day's note, summer and winter.
+# The scheduled run emails the review; a manual run emails only when asked.
+
+on:
+  schedule:
+    - cron: "13 23 * * 5"
+  workflow_dispatch:
+    inputs:
+      week_ending:
+        description: The week's Friday, YYYY-MM-DD (default the last finished week)
+        required: false
+        default: ""
+      send:
+        description: Email the review
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-review
+  cancel-in-progress: false
+
+jobs:
+  weekly:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: andramarkets-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: House fonts
+        run: sudo apt-get update && sudo apt-get install -y fonts-texgyre fonts-liberation2
+
+      - name: Dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Build the weekly review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          WEEK: ${{ inputs.week_ending }}
+          SEND: ${{ github.event_name == 'schedule' || inputs.send }}
+        run: |
+          args=()
+          [ -n "$WEEK" ] && args+=(--week-ending "$WEEK")
+          [ "$SEND" = "true" ] || args+=(--no-mail)
+          python weekly_run.py "${args[@]}"
+
+      - name: Keep the edition
+        # Named so neither archive.py nor the site's note importer picks it up.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: andramarkets-weekly-${{ github.run_id }}
+          path: andramarkets-agent/out/
+          if-no-files-found: ignore

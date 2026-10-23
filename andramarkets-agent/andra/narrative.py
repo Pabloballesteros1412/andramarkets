@@ -247,8 +247,9 @@ LIST_FIELDS = ("takeaways", "watching")
 _TAG = re.compile(r"^\s*=+\s*(\w+)\s*=+\s*$", re.M)
 
 
-def parse_reply(txt: str) -> dict:
-    """Split a tagged reply into sections. Never raises on shape alone."""
+def parse_reply(txt: str, fields=FIELDS, list_fields=LIST_FIELDS) -> dict:
+    """Split a tagged reply into sections. Never raises on shape alone.
+    `fields` names the sections kept (the weekly review has its own)."""
     txt = re.sub(r"```[a-z]*", "", txt).strip()
     marks = list(_TAG.finditer(txt))
     if not marks:
@@ -258,13 +259,13 @@ def parse_reply(txt: str) -> dict:
     out: dict = {}
     for i, m in enumerate(marks):
         name = m.group(1).strip().lower()
-        if name not in FIELDS:
+        if name not in fields:
             continue
         stop = marks[i + 1].start() if i + 1 < len(marks) else len(txt)
         body = txt[m.end():stop].strip()
         if not body:
             continue
-        if name in LIST_FIELDS:
+        if name in list_fields:
             items = [re.sub(r"^\s*(?:[-*\u2022]|\d+[.)])\s*", "", ln).strip()
                      for ln in body.splitlines() if ln.strip()]
             out[name] = [i for i in items if i]
@@ -273,7 +274,7 @@ def parse_reply(txt: str) -> dict:
 
     if not out:
         raise ValueError(f"tags found but every section was empty: {txt[:300]!r}")
-    missing = [f for f in FIELDS if f not in out]
+    missing = [f for f in fields if f not in out]
     if missing:
         log.warning("Reply is missing %d section(s): %s", len(missing),
                     ", ".join(missing))
