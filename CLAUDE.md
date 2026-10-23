@@ -15,6 +15,7 @@ Deliverables produced on each run:
 - LinkedIn and TikTok captions (English)
 - Voiceover script
 - Verified-facts JSON
+- FX analysis note (PDF, 800 to 1,200 words) and its JSON for the site's FX section (`fx_YYYYMMDD.json`)
 
 Secrets (Anthropic API key, FRED key, SMTP settings) live in GitHub repository secrets. Never print, log, hardcode or commit them.
 

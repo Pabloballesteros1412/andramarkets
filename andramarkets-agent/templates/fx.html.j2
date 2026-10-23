@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Andra Markets &middot; FX Analysis &middot; {{ date_long }}</title>
+<style>{{ css }}
+.kpi{ display:grid; grid-template-columns:repeat(5,1fr); gap:5mm; }
+.kpi .stat .v{ font-size:13pt; }
+.kpi .stat .c{ font-size:7.4pt; font-weight:600; margin-top:1mm; }
+.section.flow{ break-inside:auto; }
+.section.flow p, .levels li{ break-inside:avoid; }
+.levels{ margin:0; padding-left:4.2mm; }
+.levels li{ margin-bottom:1.6mm; }
+.legal{ break-inside:avoid; }
+</style></head><body>
+
+{% macro tbl(rows, head="Pair") -%}
+<table><thead><tr><th>{{ head }}</th><th>Close</th><th>1D</th><th>1W</th><th>1M</th><th>YTD</th></tr></thead><tbody>
+{% for r in rows %}<tr>
+  <td>{{ r.name }}</td>
+  <td>{{ r.last | lvl(r.dec) }}</td>
+  <td class="{{ r.d1 | dir }}">{{ r.d1 | chg }}</td>
+  <td class="{{ r.w1 | dir }}">{{ r.w1 | chg }}</td>
+  <td class="{{ r.m1 | dir }}">{{ r.m1 | chg }}</td>
+  <td class="{{ r.ytd | dir }}">{{ r.ytd | chg }}</td>
+</tr>{% endfor %}
+</tbody></table>
+{%- endmacro %}
+
+{% macro sec(num, title, note="") -%}
+<div class="sec-head"><span class="sec-num">{{ num }}</span>
+  <span class="sec-title">{{ title }}</span>
+  {% if note %}<span class="sec-note">{{ note }}</span>{% endif %}</div>
+{%- endmacro %}
+
+{% macro exh(no, title, img, src) -%}
+<figure><div class="ex-head"><div class="ex-no">Exhibit {{ no }}</div>
+  <div class="ex-title">{{ title }}</div></div>
+  <img src="{{ img }}" alt=""><div class="ex-src">{{ src }}</div></figure>
+{%- endmacro %}
+
+{% macro prose(id) -%}
+{% for p in (n[id] or "").split("\n\n") if p %}<p>{{ p }}</p>{% endfor %}
+{%- endmacro %}
+
+<div class="page">
+  <div class="rule-top"></div>
+  <div class="runhead">
+    <div class="mark">Andra Markets</div>
+    <div class="runhead-meta">Global Markets Research<br>FX analysis &middot; New York close</div>
+  </div>
+
+  <div class="eyebrow"><b>FX Analysis</b><span>{{ date_long }}</span><span>Edition {{ edition }}</span></div>
+  <h1>{{ n.headline }}</h1>
+  <p class="standfirst">{{ n.standfirst }}</p>
+  <div class="byline"><span>Andra Markets Research Desk</span><span>Levels at New York close &middot; Published {{ published }}</span></div>
+
+  <div class="section first">
+    <div class="kpi">
+      {% for k in kpi %}<div class="stat"><div class="v">{{ k.value }}</div>
+        <div class="c {{ k.dir }}">{{ k.chg }}</div><div class="l">{{ k.label }}</div></div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="section">
+    {{ sec("1.0", "Key takeaways") }}
+    <div class="g-11">
+      <div><ol class="takeaways">{% for k in n.takeaways %}<li>{{ k }}</li>{% endfor %}</ol></div>
+      <div>{% if ex.d1 %}{{ exh(1, "Currencies against the dollar, session", ex.d1,
+            "Percent. Positive when the currency gained on the dollar. Source: Andra Markets.") }}{% endif %}</div>
+    </div>
+  </div>
+
+  <div class="section flow">
+    {{ sec("2.0", "The dollar", "Dollar index and the US front end") }}
+    <div class="g-11">
+      <div>{{ prose("dollar") }}</div>
+      <div>{{ tbl(dollar, "Index") }}</div>
+    </div>
+  </div>
+
+  <div class="section flow">
+    {{ sec("3.0", "G10 majors", "Moves as quoted") }}
+    {{ tbl(majors) }}
+    <div style="margin-top:3mm">{{ prose("majors") }}</div>
+  </div>
+
+  <div class="section flow">
+    {{ sec("4.0", "Emerging markets", "Moves as quoted") }}
+    {{ tbl(em) }}
+    <div style="margin-top:3mm">{{ prose("em") }}</div>
+  </div>
+
+  <div class="section flow">
+    {{ sec("5.0", "Rate differentials and central banks", "Policy rates on file") }}
+    {{ prose("drivers") }}
+    <div class="g-2" style="margin-top:3mm">
+      <div>
+        <table><thead><tr><th>Bank</th><th>Rate</th><th>vs Fed</th><th>Last move</th><th>Next</th></tr></thead><tbody>
+        {% if fed %}<tr><td>Fed &middot; USD</td>
+          <td>{% if fed.rate_lower is not none %}{{ fed.rate_lower | num(2) }}-{% endif %}{{ fed.rate | num(2) }}%</td>
+          <td>&middot;</td>
+          <td class="{{ fed.last_change_bp | dir }}">{% if fed.last_change_bp is not none %}{{ fed.last_change_bp | bp }}{% else %}n/a{% endif %}</td>
+          <td>{{ fed.next_meeting or "n/a" }}</td></tr>{% endif %}
+        {% for b in banks %}<tr><td>{{ b.short }} &middot; {{ b.currency }}</td>
+          <td>{{ b.rate | num(2) }}%</td>
+          <td>{% if b.vs_fed_bp is not none %}{{ b.vs_fed_bp | bp }}{% else %}n/a{% endif %}</td>
+          <td class="{{ b.last_change_bp | dir }}">{% if b.last_change_bp is not none %}{{ b.last_change_bp | bp }}{% else %}n/a{% endif %}</td>
+          <td>{{ b.next_meeting or "n/a" }}</td></tr>{% endfor %}
+        </tbody></table>
+        <div class="ex-src">Differential to the top of the Fed's target range, basis points.
+          Fed and ECB from FRED; other banks from the desk's policy-rate file.
+          {% if banks_not_on_file %}Not on file: {{ banks_not_on_file | join(", ") }}.{% endif %}
+          {% if banks_out_of_date %} Left out pending an update after their last meeting: {{ banks_out_of_date | join(", ") }}.{% endif %}</div>
+      </div>
+      <div>{% if ex.m1 %}{{ exh(2, "Currencies against the dollar, one month", ex.m1,
+            "Percent, 21 sessions. Positive when the currency gained on the dollar. Source: Andra Markets.") }}{% endif %}</div>
+    </div>
+  </div>
+
+  <div class="section flow">
+    {{ sec("6.0", "Levels that matter", "Ranges and moving averages") }}
+    <table><thead><tr><th>Pair</th><th>Close</th><th>1M low</th><th>1M high</th><th>50D avg</th><th>200D avg</th><th>52W low</th><th>52W high</th></tr></thead><tbody>
+    {% for r in levels %}<tr><td>{{ r.name }}</td><td>{{ r.last | lvl(r.dec) }}</td>
+      <td>{{ r.levels.low_1m | lvl(r.dec) }}</td><td>{{ r.levels.high_1m | lvl(r.dec) }}</td>
+      <td>{{ r.levels.ma50 | lvl(r.dec) }}</td><td>{{ r.levels.ma200 | lvl(r.dec) }}</td>
+      <td>{{ r.levels.low_52w | lvl(r.dec) }}</td><td>{{ r.levels.high_52w | lvl(r.dec) }}</td></tr>{% endfor %}
+    </tbody></table>
+    {% if n.levels %}<ul class="levels" style="margin-top:3mm">{% for l in n.levels %}<li>{{ l }}</li>{% endfor %}</ul>{% endif %}
+  </div>
+
+  {% if n.ahead %}
+  <div class="section">
+    {{ sec("7.0", "Ahead", "Central bank meetings on file, next two weeks") }}
+    {{ prose("ahead") }}
+  </div>
+  {% endif %}
+
+  <div class="section">
+    {{ sec("8.0", "Methodology") }}
+    <p style="font-size:6.8pt">Levels are New York closing prints for the session
+    shown. Daily, weekly and monthly moves are percent changes over one, five and
+    21 sessions, for each pair as quoted: a rise in a USD/XXX pair is a stronger
+    dollar, a rise in EUR/USD, GBP/USD, AUD/USD or NZD/USD a weaker one. Exhibits
+    show each currency's own move against the dollar. Levels that matter are the
+    1-month and 52-week high and low and the 50- and 200-day averages of daily
+    closes. Policy rates for the Fed and the ECB are read from FRED; other central
+    banks come from a policy-rate file maintained by the desk and are used only
+    once checked against the bank's own publication and before its next meeting.
+    Differentials are against the top of the Fed's target range.
+    {% if pairs_without_print %} No print this session for {{ pairs_without_print | join(", ") }}.{% endif %}
+    Every figure in the text passes the same automated trace check as the daily
+    close note before the analysis is released.</p>
+  </div>
+
+  <div class="legal">
+    <b>Disclaimer.</b> This document is produced by Andra Markets for information
+    only. It is not investment advice, a personal recommendation, or an offer or
+    solicitation to buy or sell any financial instrument, and it does not take
+    account of the objectives, financial situation or needs of any recipient.
+    Nothing in it is a forecast or a trade recommendation. Data is drawn from
+    sources believed to be reliable; accuracy and completeness are not
+    guaranteed. Levels are as of the close shown and may have changed since. Past
+    performance does not predict future returns and all investment carries risk
+    of loss of capital. No part of this document may be reproduced without
+    written permission.
+    {% if not audit_ok %}<br><b>Control note.</b> This edition did not fully pass
+    the automated figure check. Review the flagged sections before distribution.{% endif %}
+  </div>
+  <div class="foot"><span>Andra Markets &middot; Global Markets Research</span>
+    <span>FX analysis &middot; {{ date_short }}</span><span>Edition {{ edition }}</span></div>
+</div>
+</body></html>

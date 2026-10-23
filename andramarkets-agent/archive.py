@@ -33,9 +33,11 @@ logging.basicConfig(level=logging.INFO, datefmt="%H:%M:%S",
 log = logging.getLogger("andra.archive")
 
 # What is kept: the report, the verified fact pack, the note text, the chart
-# series and, once the run writes one, the manifest. Captions and social
+# series, the manifest, and the FX analysis (its PDF and fx_*.json, the file
+# the site imports for its FX section). Captions and social
 # stills are rebuilt from these and are not archived.
-KEEP = re.compile(r"(AndraMarkets_Close|facts|note|series|manifest)_(\d{8})\.(pdf|json)")
+KEEP = re.compile(r"(AndraMarkets_Close|AndraMarkets_FX|facts|note|series|manifest|fx)"
+                  r"_(\d{8})\.(pdf|json)")
 ARTIFACT = re.compile(r"andramarkets-(\d+)")
 PUBLIC_REPOS = {"andramarkets-site"}
 

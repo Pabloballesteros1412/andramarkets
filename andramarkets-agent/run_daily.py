@@ -204,6 +204,42 @@ def main(argv: list[str] | None = None) -> int:
     log.info("Figure check: %s (%d attempts)",
              "passed" if note.audit_ok else f"FAILED {note.unsupported}", note.attempts)
 
+    # 2b. FX analysis. Its own fact pack, writer and figure check. A failure
+    # here is logged and the close note still goes out without it.
+    fx_facts, fx_note, fx_mode = None, None, "model"
+    try:
+        from andra import fx
+        if args.demo:
+            from demo_fixture import demo_banks, demo_fx_note
+            fx_facts = fx.fx_facts(mf, demo_banks(date))
+            fx_note, fx_mode = demo_fx_note(fx_facts), "demo"
+        else:
+            # A replay from the archive has no price history to rebuild the
+            # weekly, monthly and level figures from: the archived pack is used.
+            archived = (replay or {}).get("facts", {}).get("fx_analysis")
+            if archived and args.replay_data == "archive":
+                fx_facts = archived
+            else:
+                fx_facts = fx.fx_facts(mf)
+            if replay:
+                fx_note, fx_mode = fx.write_without_model(fx_facts), "quantitative"
+            else:
+                try:
+                    fx_note = fx.write(fx_facts)
+                except Exception:  # noqa: BLE001
+                    log.exception("FX writer unavailable. FX analysis in quantitative mode.")
+                    fx_note, fx_mode = fx.write_without_model(fx_facts), "quantitative"
+        log.info("FX analysis: %d pairs, %d words, figure check %s, trade language %s.",
+                 len(fx_facts["pairs"]), fx.word_count(fx_note.content),
+                 "passed" if fx_note.audit_ok else f"FAILED {fx_note.unsupported}",
+                 fx.advice_flags(fx_note.content) or "none")
+        # Saved with the day's verified facts, after the close note was
+        # written and audited, so its writer never saw it.
+        facts["fx_analysis"] = fx_facts
+    except Exception:  # noqa: BLE001
+        log.exception("FX analysis failed. The close note goes out without it.")
+        fx_facts = fx_note = None
+
     # 3 · Composition
     stamp = date.strftime("%Y%m%d")
     if replay:
@@ -219,7 +255,20 @@ def main(argv: list[str] | None = None) -> int:
         render.report_pdf(ctx, report)
         render.linkedin_pdf(ctx, carousel)
         stills = render.report_images(report, str(out_dir / f"tiktok_{stamp}"), f"andra_{stamp}")
-    log.info("Built 2 documents and %d page stills in %s", len(stills), out_dir)
+        fx_pdf = None
+        if fx_note is not None:
+            try:
+                from andra import fx_render
+                fx_ctx = fx_render.build_context(fx_facts, fx_note,
+                                                 fx_render.build_exhibits(fx_facts, tmp),
+                                                 edition=edition)
+                fx_pdf = str(out_dir / f"AndraMarkets_FX_{stamp}.pdf")
+                fx_render.report_pdf(fx_ctx, fx_pdf)
+            except Exception:  # noqa: BLE001
+                log.exception("FX analysis could not be printed. The close note goes out without it.")
+                fx_pdf = None
+    log.info("Built %d documents and %d page stills in %s",
+             3 if fx_pdf else 2, len(stills), out_dir)
 
     # 4 · Copy
     from andra.social import check, linkedin_caption, tiktok_caption, tiktok_script
@@ -233,6 +282,23 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(facts, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     (out_dir / f"note_{stamp}.json").write_text(
         json.dumps(note.content, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    fx_check = None
+    if fx_note is not None:
+        site = fx.to_site(fx_facts, fx_note, fx_mode, edition,
+                          Path(fx_pdf).name if fx_pdf else None)
+        (out_dir / f"fx_{stamp}.json").write_text(
+            json.dumps(site, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+        fx_check = {"audit_ok": fx_note.audit_ok, "unsupported": fx_note.unsupported,
+                    "attempts": fx_note.attempts, "mode": fx_mode,
+                    "words": site["word_count"],
+                    "trade_language": site["trade_language_flags"],
+                    "banks_not_on_file": fx_facts["banks_not_on_file"],
+                    "banks_out_of_date": fx_facts["banks_out_of_date"],
+                    "pdf": bool(fx_pdf),
+                    "tokens": {"input": fx_note.usage["input_tokens"],
+                               "output": fx_note.usage["output_tokens"]},
+                    "model_calls": fx_note.usage["calls"],
+                    "model_seconds": fx_note.usage["model_seconds"]}
     # What was only visible inside the PDF and the email subject: whether the
     # figure check passed, what it rejected, and how the note was written.
     # Cost and timing: every model call of the note (failed attempts
@@ -250,6 +316,9 @@ def main(argv: list[str] | None = None) -> int:
         "model_calls": usage["calls"],
         "model_seconds": usage["model_seconds"],
         "run_seconds": round(time.monotonic() - started, 1),
+        # The FX analysis, kept apart from the close note's own tokens so the
+        # monitor's cost comparison stays like for like. None if it failed.
+        "fx": fx_check,
     }
     manifest_file = out_dir / f"manifest_{stamp}.json"
     manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2),
@@ -298,8 +367,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     from andra.mailer import send
-    send(li, tt, script, checks, [carousel, report, *stills], ctx,
-         note.audit_ok, len(mf.missing), len(stills))
+    send(li, tt, script, checks, [carousel, report, *stills, *([fx_pdf] if fx_pdf else [])],
+         ctx, note.audit_ok, len(mf.missing), len(stills), fx=fx_check)
     log.info("Delivered to %s", os.environ["MAIL_TO"])
     manifest["run_seconds"] = round(time.monotonic() - started, 1)
     manifest_file.write_text(json.dumps(manifest, ensure_ascii=False, indent=2),
