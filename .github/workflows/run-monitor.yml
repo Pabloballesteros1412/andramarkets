@@ -1,0 +1,64 @@
+name: Run monitoring
+
+# Opens an issue titled "Missed close note: <date>" when a close note goes
+# missing: at once when a scheduled run of Daily market close fails, and at
+# 22:45 UTC on weekdays when NYSE traded and no note has been produced for
+# the session. One issue per date: a later finding comments on it, and the
+# issue is closed if the note comes out after all. Nothing is emailed.
+
+on:
+  workflow_run:
+    workflows: ["Daily market close"]
+    types: [completed]
+  schedule:
+    - cron: "45 22 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: Session to check (YYYY-MM-DD, default today's)
+        required: false
+        default: ""
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+concurrency:
+  group: run-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    # Only failed scheduled runs: a manual run's failure is in front of
+    # whoever started it.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'failure' &&
+       github.event.workflow_run.event == 'schedule')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: andramarkets-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: NYSE calendar
+        run: pip install pandas-market-calendars==4.6.1
+
+      - name: A scheduled run failed
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: python monitor.py failed-run "$RUN_ID"
+
+      - name: Is today's note there?
+        if: github.event_name != 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DATE: ${{ inputs.date }}
+        run: python monitor.py check ${DATE:+--date "$DATE"}
