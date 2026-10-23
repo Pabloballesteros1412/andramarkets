@@ -1,0 +1,68 @@
+name: Replay archived run
+
+# Replays one archived run end to end in demo mode: the archived facts and
+# note go through the fact pack, the figure check, the exhibits, the report,
+# the carousel, the stills and the captions again. No model call, no email,
+# nothing committed or archived: the model and mail secrets are never passed.
+# The comparison with the archived run is written to the run summary and the
+# rebuilt files are uploaded as andramarkets-replay-<run id>, a name neither
+# archive.py nor the site's note importer picks up.
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: Session date of the archived run (YYYY-MM-DD)
+        required: true
+      run_id:
+        description: Archived run id (default the latest run of that date)
+        required: false
+        default: ""
+      data:
+        description: >-
+          archive rebuilds the market data from the archived fact pack;
+          live fetches it again from the providers for that date
+        type: choice
+        options: [archive, live]
+        default: archive
+
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: andramarkets-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: House fonts
+        run: sudo apt-get update && sudo apt-get install -y fonts-texgyre fonts-liberation2
+
+      - name: Dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Replay
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DATE: ${{ inputs.date }}
+          RUN_ID: ${{ inputs.run_id }}
+          DATA: ${{ inputs.data }}
+          # Only the live data path reads it, for the Treasury curve.
+          FRED_API_KEY: ${{ inputs.data == 'live' && secrets.FRED_API_KEY || '' }}
+        run: python replay.py "$DATE" --run-id "$RUN_ID" --data "$DATA"
+
+      - name: Upload the replayed edition
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: andramarkets-replay-${{ github.run_id }}
+          path: andramarkets-agent/replay/
+          if-no-files-found: ignore
