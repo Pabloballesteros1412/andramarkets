@@ -1,3 +1,7 @@
 __pycache__/
 andramarkets-agent/out/
+andramarkets-agent/video/out/
+andramarkets-agent/video/node_modules/
+andramarkets-agent/video/video-data.json
+andramarkets-agent/video/package-lock.json
 andramarkets-agent/replay/

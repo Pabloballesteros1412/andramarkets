@@ -47,6 +47,9 @@ def main() -> int:
     spx = _spx(facts)
     spx["prev_close"] = ser.get("prev_close")
     spx["series"] = ser.get("series", [])
+    # Files from before 23 Oct 2026 carry no interval: those were intraday
+    # unless the fetch failed, which the file does not say.
+    spx["interval"] = ser.get("interval", "5m")
 
     data = {
         "date": facts.get("date"),
@@ -59,7 +62,7 @@ def main() -> int:
     out.write_text(json.dumps({"data": data}, ensure_ascii=False, indent=2),
                    encoding="utf-8")
     print("Wrote", out.name, "from", facts_path.name,
-          "with", len(spx["series"]), "series points")
+          "with", len(spx["series"]), "series points at", spx["interval"])
     return 0
 
 
