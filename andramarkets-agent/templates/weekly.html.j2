@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
-<title>Andra Markets · Weekly Review · {{ week_long }}</title>
+<title>Andra Markets &middot; Weekly Review &middot; {{ week_long }}</title>
 <style>{{ css }}
 .days{ display:grid; grid-template-columns:repeat(5,1fr); gap:3mm; margin-top:1.5mm; }
 .days div{ border-top:.4pt solid var(--rule); padding-top:1.4mm; font-size:7pt; }
@@ -39,8 +39,8 @@
 <div class="ev">
   <div class="ev-row ev-head"><span>Day</span><span>{{ label }}</span><span>Previous</span><span>Actual</span></div>
   {% for e in rows %}
-  <div class="ev-row"><span>{{ e.date[5:] }}</span><span>{{ e.title }} <span style="color:var(--muted)">· {{ e.country }}</span></span>
-    <span>{{ e.previous }}</span><span>{{ e.actual }}{% if e.reaction %} · {{ e.reaction }}{% endif %}</span></div>
+  <div class="ev-row"><span>{{ e.date[5:] }}</span><span>{{ e.title }} <span style="color:var(--muted)">&middot; {{ e.country }}</span></span>
+    <span>{{ e.previous }}</span><span>{{ e.actual }}{% if e.reaction %} &middot; {{ e.reaction }}{% endif %}</span></div>
   {% endfor %}
 </div>
 {%- endmacro %}
@@ -49,13 +49,13 @@
   <div class="rule-top"></div>
   <div class="runhead">
     <div class="mark">Andra Markets</div>
-    <div class="runhead-meta">Global Markets Research<br>Weekly review · {{ week_span }}</div>
+    <div class="runhead-meta">Global Markets Research<br>Weekly review &middot; {{ week_span }}</div>
   </div>
 
   <div class="eyebrow"><b>Weekly Market Review</b><span>{{ week_long }}</span><span>{{ edition }}</span></div>
   <h1>{{ n.headline }}</h1>
   <p class="standfirst">{{ n.standfirst }}</p>
-  <div class="byline"><span>Andra Markets Research Desk</span><span>Week to the close of {{ last_session }} · Published {{ published }}</span></div>
+  <div class="byline"><span>Andra Markets Research Desk</span><span>Week to the close of {{ last_session }} &middot; Published {{ published }}</span></div>
 
   <div class="section first">
     {{ sec("1.0", "The week in markets", "Close and change on the week") }}
@@ -82,7 +82,7 @@
     <div class="g-3">
       <div>{{ wtbl(t.us_equity, "United States") }}</div>
       <div>{{ wtbl(t.europe, "Europe") }}</div>
-      <div>{{ wtbl(t.apac + t.americas, "Asia-Pacific · Americas") }}</div>
+      <div>{{ wtbl(t.apac + t.americas, "Asia-Pacific &middot; Americas") }}</div>
     </div>
   </div>
 
@@ -119,12 +119,12 @@
 
   {% if ahead %}
   <div class="section">
-    {{ sec("6.0", "The week ahead", "High importance · all times ET") }}
+    {{ sec("6.0", "The week ahead", "High importance &middot; all times ET") }}
     {% if n.week_ahead %}<p>{{ n.week_ahead }}</p>{% endif %}
     <div class="cal" style="margin-top:2mm">
       <div class="cal-row cal-head"><span>Day</span><span>Event</span><span>Time</span><span>Previous</span></div>
       {% for c in ahead %}
-      <div class="cal-row"><span class="t">{{ c.date[5:] }}</span><span>{{ c.title }} · {{ c.country }}</span>
+      <div class="cal-row"><span class="t">{{ c.date[5:] }}</span><span>{{ c.title }} &middot; {{ c.country }}</span>
         <span>{{ c.time }}</span><span>{{ c.previous }}</span></div>
       {% endfor %}
     </div>
@@ -164,7 +164,7 @@
     {% if not audit_ok %}<br><b>Control note.</b> This edition did not fully pass
     the automated figure check. Review the flagged sections before distribution.{% endif %}
   </div>
-  <div class="foot"><span>Andra Markets · Global Markets Research</span>
-    <span>Weekly review · {{ date_short }}</span><span>{{ edition }}</span></div>
+  <div class="foot"><span>Andra Markets &middot; Global Markets Research</span>
+    <span>Weekly review &middot; {{ date_short }}</span><span>{{ edition }}</span></div>
 </div>
 </body></html>

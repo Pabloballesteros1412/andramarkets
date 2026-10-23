@@ -300,9 +300,10 @@ _NUM = re.compile(r"[-+]?\d+(?:,\d{3})*(?:\.\d+)?")
 
 
 def _values(text: str) -> list[float]:
-    """The figures in a calendar cell ("+0.3%", "−1.2%", "254K", "$2.35"),
-    as numbers, so the figure check can find them in the fact pack."""
-    t = (text or "").replace("−", "-")
+    """The figures in a calendar cell ("+0.3%", "254K", "$2.35", a fall printed
+    with a true minus sign), as numbers, so the figure check can find them in
+    the fact pack."""
+    t = (text or "").replace("\u2212", "-")
     return [float(m.replace(",", "")) for m in _NUM.findall(t)]
 
 
@@ -363,9 +364,9 @@ def parse_calendar(page: str) -> list[dict]:
     for r in p.rows:
         if not r["title"]:
             continue
-        r["previous"] = r["previous"].replace("−", "-")
-        r["actual"] = r["actual"].replace("−", "-")
-        r["reaction"] = r["reaction"].replace("−", "-").replace("First session", "").strip()
+        r["previous"] = r["previous"].replace("\u2212", "-")
+        r["actual"] = r["actual"].replace("\u2212", "-")
+        r["reaction"] = r["reaction"].replace("\u2212", "-").replace("First session", "").strip()
         r["values"] = _values(r["previous"]) + _values(r["actual"]) + _values(r["reaction"])
         rows.append(r)
     return rows
@@ -472,7 +473,7 @@ def write(facts: dict, max_attempts: int = 3) -> Note:
     """The model writes the review; the daily note's figure check audits it,
     and a rejected draft goes back with the offending figures."""
     from anthropic import Anthropic
-    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"].strip())
     messages = [{"role": "user", "content":
                  f"{WEEKLY_SCHEMA}\n\nVerified fact pack for the week. This is the "
                  f"only admissible source of figures:\n\n"
@@ -480,9 +481,9 @@ def write(facts: dict, max_attempts: int = 3) -> Note:
     content, bad, last_error = {}, [], None
     for attempt in range(1, max_attempts + 1):
         try:
+            # Plain call, no thinking parameter (CLAUDE.md).
             r = client.messages.create(model=MODEL, max_tokens=MAX_TOKENS,
-                                       system=WEEKLY_SYSTEM, messages=messages,
-                                       thinking={"type": "disabled"})
+                                       system=WEEKLY_SYSTEM, messages=messages)
             txt = "".join(getattr(b, "text", "") for b in r.content if b.type == "text")
             if r.stop_reason == "max_tokens":
                 raise ValueError("reply hit the token ceiling and is truncated")
