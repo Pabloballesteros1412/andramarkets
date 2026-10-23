@@ -32,7 +32,7 @@ Secrets (Anthropic API key, FRED key, SMTP settings) live in GitHub repository s
 - Parse model output with tagged section delimiters (for example `===headline===`), not JSON.
 - Strip whitespace from API keys read from secrets. A leading space in the FRED key once silently dropped every rate series.
 - Anchor all dates to New York time (`_ny_now()`), or the report pulls the previous day's data.
-- Keep the 16:15 to 18:00 New York publish window check. It prevents duplicate emails from overlapping cron runs.
+- Keep the session date and dedup guards that prevent duplicate or misdated emails from overlapping cron runs. The date reported on is the last NYSE session that closed at least 15 minutes ago in New York (`andra/session.py`); a scheduled run reports only the session that closed that day, or nothing. `.last_published` records the last session emailed, and any run for a session already recorded exits without sending. The workflow commits the marker back after each run.
 - GitHub Actions free-tier scheduling can delay or skip runs. That is a platform limitation, not a code bug. Do not try to "fix" it in code.
 - Layout: use continuous flow with `break-inside: avoid`, not `overflow: hidden`, to avoid clipped content.
 
@@ -40,8 +40,8 @@ Secrets (Anthropic API key, FRED key, SMTP settings) live in GitHub repository s
 
 - Everything is published as "Andra Markets", never under a personal name.
 - All published text is in English.
-- Research note style: Times New Roman on white, Andra Markets masthead, KPI band, numbered sections, methodology and disclaimer.
-- Red and green are for charts only. Body text, tables and labels stay black.
+- Research note style: Inter on white (falling back to Helvetica Neue, then TeX Gyre Heros), Andra Markets masthead, KPI band, numbered sections, methodology and disclaimer.
+- Red and green go on every figure that shows a rise or a fall, always with its + or - sign so colour is never the only cue. Labels and prose stay black.
 - Do not change the visual design of any deliverable unless the task asks for it.
 
 ## Coding guidelines

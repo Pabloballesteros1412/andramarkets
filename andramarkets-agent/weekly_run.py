@@ -126,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
              "read" if facts["calendar_source"] else "unavailable")
 
     mode = "model"
-    if args.no_model or not os.getenv("ANTHROPIC_API_KEY"):
+    if args.no_model or not os.getenv("ANTHROPIC_API_KEY", "").strip():
         note, mode = weekly.write_without_model(facts), "quantitative"
     else:
         try:

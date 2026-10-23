@@ -66,3 +66,23 @@ def test_usage_survives_a_writer_that_gives_up(monkeypatch):
     with pytest.raises(RuntimeError) as e:
         run(monkeypatch, bad)
     assert e.value.usage["calls"] == 3 and e.value.usage["output_tokens"] == 15
+
+
+def test_plain_call_without_thinking_and_a_stripped_key(monkeypatch):
+    seen = {}
+
+    class Recording(Client):
+        def create(self, **kw):
+            seen.update(kw)
+            return super().create(**kw)
+
+    def anthropic(api_key):
+        seen["api_key"] = api_key
+        return Recording([reply(FULL)])
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", " sk-test\n")
+    monkeypatch.setitem(sys.modules, "anthropic", types.SimpleNamespace(Anthropic=anthropic))
+    narrative.write(FACTS)
+    assert "thinking" not in seen and "temperature" not in seen
+    assert seen["max_tokens"] == 16000
+    assert seen["api_key"] == "sk-test"

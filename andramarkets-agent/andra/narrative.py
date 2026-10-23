@@ -298,27 +298,11 @@ def _metered(meter: dict | None, create, **kwargs):
 
 
 def _call(client, messages: list[dict], meter: dict | None = None) -> dict:
-    # Writing a note from an already-computed fact pack does not need the
-    # model to reason step by step, and leaving thinking at its default is
-    # what broke production twice: the model spent its entire token budget
-    # on a hidden reasoning block and returned no text at all, always with
-    # the same signature (blocks: ['thinking'], stop: max_tokens). Disabling
-    # it explicitly, rather than just omitting the parameter, is what fixed
-    # this the first time. The fallback keeps the call working if a future
-    # SDK or model rejects the parameter outright.
-    kwargs = dict(model=MODEL, max_tokens=MAX_TOKENS, system=SYSTEM,
-                  messages=messages, thinking={"type": "disabled"})
-    try:
-        r = _metered(meter, client.messages.create, **kwargs)
-    except TypeError:
-        kwargs.pop("thinking", None)
-        r = _metered(meter, client.messages.create, **kwargs)
-    except Exception as e:  # noqa: BLE001
-        if "thinking" in str(e).lower():
-            kwargs.pop("thinking", None)
-            r = _metered(meter, client.messages.create, **kwargs)
-        else:
-            raise
+    # Plain call: no thinking parameter, no temperature (CLAUDE.md). A reply
+    # that carries no text or stops at the token ceiling is caught below and
+    # counts as a failed attempt, so it is retried, never printed.
+    r = _metered(meter, client.messages.create, model=MODEL, max_tokens=MAX_TOKENS,
+                 system=SYSTEM, messages=messages)
 
     txt = "".join(getattr(b, "text", "") for b in r.content
                   if b.type == "text").strip()
@@ -364,7 +348,7 @@ def _as_tagged(content: dict) -> str:
 
 def write(facts: dict, max_attempts: int = 3) -> Note:
     from anthropic import Anthropic
-    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"].strip())
     prompt = (f"{SCHEMA}\n\nVerified fact pack for the session. This is the only "
               f"admissible source of figures:\n\n"
               f"{json.dumps(facts, ensure_ascii=False, default=str)}")

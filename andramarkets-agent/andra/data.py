@@ -123,7 +123,8 @@ def _yahoo(instrs: list[Instrument], start: dt.date, end: dt.date) -> pd.DataFra
 
 
 def _fred(instrs: list[Instrument], start: dt.date, end: dt.date) -> pd.DataFrame:
-    key = os.getenv("FRED_API_KEY")
+    # Stripped: a leading space in the secret once dropped every rate series.
+    key = os.getenv("FRED_API_KEY", "").strip()
     if not key:
         log.warning("FRED_API_KEY not set: skipping the Treasury curve block.")
         return pd.DataFrame()
