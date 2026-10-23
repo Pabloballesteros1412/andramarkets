@@ -1,0 +1,51 @@
+name: Tests
+
+# The agent's unit tests, plus one archived day replayed end to end
+# (tests/test_replay.py): the 21 October 2026 run is fetched from its
+# archive release with the workflow token. Read-only: nothing is sent,
+# committed or archived, and no secret is passed.
+
+on:
+  pull_request:
+    paths:
+      - "andramarkets-agent/**"
+      - ".github/workflows/tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "andramarkets-agent/**"
+      - ".github/workflows/tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: andramarkets-agent
+    env:
+      REPLAY_DAY: "2026-10-21"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dependencies
+        run: |
+          pip install -r requirements.txt pytest
+          playwright install --with-deps chromium
+
+      - name: Fetch one archived day
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -c "import pathlib, replay; replay.fetch('$REPLAY_DAY', pathlib.Path('replay/$REPLAY_DAY/input'))"
+
+      - name: Tests
+        env:
+          ANDRA_REPLAY_DAY: replay/${{ env.REPLAY_DAY }}/input
+        run: python -m pytest -q

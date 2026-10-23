@@ -79,7 +79,7 @@ def _b64(path: str) -> str:
 
 
 # ----------------------------------------------------------------- exhibits
-def build_exhibits(mf, tmp: str) -> dict[str, str]:
+def build_exhibits(mf, tmp: str, facts=None) -> dict[str, str]:
     charts.house_style()
     ex: dict[str, str] = {}
     p = lambda n: os.path.join(tmp, f"{n}.png")  # noqa: E731
@@ -103,7 +103,7 @@ def build_exhibits(mf, tmp: str) -> dict[str, str]:
         ex["sectors_sq"] = _b64(charts.bars_ranked(names, vals, p("sec_sq"), size=(7.6, 5.2)))
         ex["sectors_tt"] = _b64(charts.bars_ranked(names, vals, p("sec_tt"), size=(7.2, 6.4)))
 
-    b = breadth(mf)
+    b = (facts or {}).get("breadth") or breadth(mf)
     ex["breadth"] = _b64(charts.breadth_bar(b["advancers"], b["decliners"],
                                             b["unchanged"], p("breadth")))
 
@@ -284,9 +284,14 @@ def _social_pack(mf, note, tmp: str, hero: dict) -> dict:
     return pack
 
 
-def build_context(mf, note, ex, calendar=None, edition=1, social_tmp=None) -> dict:
+def build_context(mf, note, ex, calendar=None, edition=1, social_tmp=None,
+                  facts=None) -> dict:
+    """Template context. With `facts`, the risk score, breadth and movers are
+    the fact pack's, so the note prints exactly what the writer was given (a
+    replay rebuilt from the archive carries them over from the archive)."""
     d = mf.asof
-    bar = risk_barometer(mf)
+    facts = facts or {}
+    bar = facts.get("risk_barometer") or risk_barometer(mf)
     cur = curve(mf)
 
     sec = mf.block("sectors")
@@ -317,8 +322,8 @@ def build_context(mf, note, ex, calendar=None, edition=1, social_tmp=None) -> di
         "edition": edition if isinstance(edition, str) else f"{edition:04d}",
         "pages": 5,
         "barometer": bar,
-        "breadth": breadth(mf),
-        "movers": movers(mf),
+        "breadth": facts.get("breadth") or breadth(mf),
+        "movers": facts.get("movers") or movers(mf),
         "slopes": [{"name": k, "bp": v["bp"], "delta": v["delta"]}
                    for k, v in cur.items() if isinstance(v, dict) and "bp" in v],
         "curve_note": _curve_note(cur),
