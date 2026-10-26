@@ -234,8 +234,10 @@ def main(argv: list[str] | None = None) -> int:
                  "passed" if fx_note.audit_ok else f"FAILED {fx_note.unsupported}",
                  fx.advice_flags(fx_note.content) or "none")
         # Saved with the day's verified facts, after the close note was
-        # written and audited, so its writer never saw it.
-        facts["fx_analysis"] = fx_facts
+        # written and audited, so its writer never saw it. A replay keeps
+        # the archived pack as it was: it gains no FX section it never had.
+        if not replay or archived:
+            facts["fx_analysis"] = fx_facts
     except Exception:  # noqa: BLE001
         log.exception("FX analysis failed. The close note goes out without it.")
         fx_facts = fx_note = None
