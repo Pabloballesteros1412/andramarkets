@@ -210,8 +210,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from andra import fx
         if args.demo:
-            from demo_fixture import demo_banks, demo_fx_note
-            fx_facts = fx.fx_facts(mf, demo_banks(date))
+            from demo_fixture import demo_fx_note
+            fx_facts = fx.fx_facts(mf)
             fx_note, fx_mode = demo_fx_note(fx_facts), "demo"
         else:
             # A replay from the archive has no price history to rebuild the
@@ -234,8 +234,10 @@ def main(argv: list[str] | None = None) -> int:
                  "passed" if fx_note.audit_ok else f"FAILED {fx_note.unsupported}",
                  fx.advice_flags(fx_note.content) or "none")
         # Saved with the day's verified facts, after the close note was
-        # written and audited, so its writer never saw it.
-        facts["fx_analysis"] = fx_facts
+        # written and audited, so its writer never saw it. A replay keeps
+        # the archived pack as it was: it gains no FX section it never had.
+        if not replay or archived:
+            facts["fx_analysis"] = fx_facts
     except Exception:  # noqa: BLE001
         log.exception("FX analysis failed. The close note goes out without it.")
         fx_facts = fx_note = None
@@ -292,8 +294,7 @@ def main(argv: list[str] | None = None) -> int:
                     "attempts": fx_note.attempts, "mode": fx_mode,
                     "words": site["word_count"],
                     "trade_language": site["trade_language_flags"],
-                    "banks_not_on_file": fx_facts["banks_not_on_file"],
-                    "banks_out_of_date": fx_facts["banks_out_of_date"],
+                    "banks_without_rate": fx_facts["banks_without_rate"],
                     "pdf": bool(fx_pdf),
                     "tokens": {"input": fx_note.usage["input_tokens"],
                                "output": fx_note.usage["output_tokens"]},

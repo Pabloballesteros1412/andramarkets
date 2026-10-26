@@ -21,6 +21,12 @@ on:
           or archived. Builds every file and the video, for testing.
         type: boolean
         default: false
+      check:
+        description: >-
+          Check run: live data and the model, but no email (no mail secrets are
+          passed), nothing committed or archived. For testing the writers.
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -39,6 +45,9 @@ jobs:
       # Demo runs name their artifacts andramarkets-demo-<run id>, which
       # neither archive.py nor the site's note importer picks up.
       ANDRA_DEMO: ${{ inputs.demo || false }}
+      # Check runs name their artifacts andramarkets-check-<run id>, which
+      # neither archive.py nor the site's importers pick up.
+      ANDRA_CHECK: ${{ inputs.check || false }}
     defaults:
       run:
         working-directory: andramarkets-agent
@@ -57,7 +66,7 @@ jobs:
           playwright install --with-deps chromium
 
       - name: Build and publish
-        if: env.ANDRA_DEMO != 'true'
+        if: env.ANDRA_DEMO != 'true' && env.ANDRA_CHECK != 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
@@ -68,13 +77,22 @@ jobs:
           MAIL_TO: ${{ secrets.MAIL_TO }}
         run: python run_daily.py
 
+      - name: Build check edition
+        # Live data and the model, no mail secrets and --no-mail: nothing is
+        # sent, and --force only lets it rebuild a session already published.
+        if: env.ANDRA_DEMO != 'true' && env.ANDRA_CHECK == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: python run_daily.py --no-mail --force
+
       - name: Build demo edition
         # No secrets: a demo run makes no model call and sends no email.
         if: env.ANDRA_DEMO == 'true'
         run: python run_daily.py --demo --no-mail
 
       - name: Save publish state
-        if: always() && env.ANDRA_DEMO != 'true'
+        if: always() && env.ANDRA_DEMO != 'true' && env.ANDRA_CHECK != 'true'
         run: |
           git config user.name "andra-bot"
           git config user.email "actions@users.noreply.github.com"
@@ -86,7 +104,7 @@ jobs:
       - name: Archive permanently
         # Artifacts expire after 90 days. This keeps the PDF, fact pack, note
         # and chart data for good, as a release in this private repo.
-        if: always() && env.ANDRA_DEMO != 'true'
+        if: always() && env.ANDRA_DEMO != 'true' && env.ANDRA_CHECK != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: python archive.py out
@@ -94,7 +112,7 @@ jobs:
       - name: Archive the edition
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ANDRA_DEMO == 'true' && 'andramarkets-demo' || 'andramarkets' }}-${{ github.run_id }}
+          name: ${{ env.ANDRA_DEMO == 'true' && 'andramarkets-demo' || env.ANDRA_CHECK == 'true' && 'andramarkets-check' || 'andramarkets' }}-${{ github.run_id }}
           path: andramarkets-agent/out/
 
       - name: Set up Node

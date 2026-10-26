@@ -63,7 +63,10 @@ STOCKS = {
 # fixture is the same series it was before the FX analysis was added.
 FX_MORE = {"nzdusd": (0.5842, .0050), "usdkrw": (1386.40, .0045),
            "usdzar": (17.62, .0068)}
-POLICY = {"fedupper": 4.00, "fedlower": 3.75, "ecbdfr": 2.00}
+POLICY = {"fedupper": 4.00, "fedlower": 3.75, "ecbdfr": 2.00, "pol_jp": 0.75,
+          "pol_gb": 3.75, "pol_ch": 0.00, "pol_ca": 2.50, "pol_au": 3.60,
+          "pol_nz": 2.75, "pol_cn": 1.40, "pol_mx": 7.25, "pol_br": 14.25,
+          "pol_in": 5.50, "pol_kr": 2.50, "pol_za": 7.00, "pol_tr": 39.50}
 INVERSE = {"vix", "vix9d", "vix3m", "vvix", "move", "vstoxx", "rvx"}
 
 
@@ -215,35 +218,6 @@ def demo_note() -> Note:
     }, audit_ok=True)
 
 
-# Central banks for the demo, in the shape of central_banks.json. Synthetic
-# like the rest of the fixture: these are not anyone's actual policy rates.
-def demo_banks(asof: dt.date) -> dict:
-    nxt = lambda days: (asof + dt.timedelta(days=days)).isoformat()  # noqa: E731
-    b = lambda bank, short, rate, move, days: {  # noqa: E731
-        "bank": bank, "short": short, "rate_name": "Policy rate", "rate": rate,
-        "last_decision": (asof - dt.timedelta(days=30)).isoformat(),
-        "last_change_bp": move, "next_meeting": nxt(days), "source": "demo",
-        "verified": True}
-    return {
-        "USD": b("Federal Reserve", "Fed", None, None, 6),
-        "EUR": b("European Central Bank", "ECB", None, None, 7),
-        "JPY": b("Bank of Japan", "BoJ", 0.75, 25, 8),
-        "GBP": b("Bank of England", "BoE", 3.75, -25, 14),
-        "CHF": b("Swiss National Bank", "SNB", 0.0, 0, 48),
-        "CAD": b("Bank of Canada", "BoC", 2.50, 0, 6),
-        "AUD": b("Reserve Bank of Australia", "RBA", 3.60, 0, 12),
-        "NZD": b("Reserve Bank of New Zealand", "RBNZ", 2.75, -25, 6),
-        "CNY": b("People's Bank of China", "PBoC", 1.40, 0, 30),
-        "MXN": b("Banco de Mexico", "Banxico", 7.25, -25, 28),
-        "BRL": b("Banco Central do Brasil", "BCB", 14.25, 0, 40),
-        "INR": b("Reserve Bank of India", "RBI", 5.50, 0, 45),
-        "KRW": b("Bank of Korea", "BoK", 2.50, 0, 21),
-        "ZAR": b("South African Reserve Bank", "SARB", 7.00, -25, 27),
-        # Its meeting has come: the entry is left out as out of date.
-        "TRY": {**b("Central Bank of the Republic of Turkiye", "CBRT", 39.5, -100, 0)},
-    }
-
-
 def demo_fx_note(facts: dict) -> Note:
     """The FX note for demo runs. The prose carries no figure; the levels
     lines are set from the demo fact pack, so the figure check runs on them."""
@@ -306,17 +280,17 @@ def demo_fx_note(facts: dict) -> Note:
         "the franc and the yen all carry policy rates below the Fed's, and all three "
         "gained, which says the dollar's weakness came from flows the rate data does "
         "not capture.\n\n"
-        "Among the high-yielders the differential to the Fed is widest for the real "
-        "and then the peso, and the two went in opposite directions on the session. "
+        "Outside the lira, the differential to the Fed is widest for the real and "
+        "then the peso, and the two went in opposite directions on the session. "
         "Over the month the real, with the larger carry, gained while the peso fell "
         "the most. The correlation of each pair with the US 2-year over the last 60 "
         "sessions is close to zero across the board, which fits a month in which "
-        "the front end explained little of what currencies did. The Turkish central "
-        "bank's entry is out of date after its meeting and is left out.",
+        "the front end explained little of what currencies did.\n\n"
+        "The last decisions in the pack point the same way for every bank: a cut "
+        "of the same size, applied some weeks ago, so no bank has moved the "
+        "differential since. The Bank of Japan's cut left the yen with one of the "
+        "widest gaps to the Fed in the G10, and the yen still gained on the "
+        "dollar today. The rate data sets the frame for the month; it does not "
+        "explain the session.",
         "levels": level_lines(facts),
-        "ahead": "The Fed, the Bank of Canada and the Reserve Bank of New Zealand "
-        "meet first, followed by the ECB and the Bank of Japan, and then the Reserve "
-        "Bank of Australia and the Bank of England. Each decision resets one side of "
-        "a differential that has explained little of this month's moves, so the "
-        "reaction to each will say as much as the decision itself.",
     }, audit_ok=True)

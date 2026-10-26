@@ -89,10 +89,8 @@ def _fx_line(fx: dict | None) -> str:
     parts = [f"figure check {'passed' if fx['audit_ok'] else 'FAILED ' + str(fx['unsupported'])}",
              f"{fx['words']} words", f"writing {fx['mode']}",
              f"trade language {', '.join(fx['trade_language']) or 'none'}"]
-    if fx["banks_out_of_date"]:
-        parts.append(f"update central_banks.json for {', '.join(fx['banks_out_of_date'])}")
-    if fx["banks_not_on_file"]:
-        parts.append(f"no verified rate for {', '.join(fx['banks_not_on_file'])}")
+    if fx["banks_without_rate"]:
+        parts.append(f"no policy rate for {', '.join(fx['banks_without_rate'])}")
     return "; ".join(parts)
 
 
