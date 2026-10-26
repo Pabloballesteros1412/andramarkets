@@ -14,7 +14,7 @@ class Instrument:
     key: str
     name: str                 # publication name
     ticker: str               # provider symbol
-    src: str = "yahoo"        # yahoo | fred | bloomberg
+    src: str = "yahoo"        # yahoo | fred | bis | bloomberg
     unit: str = "px"          # px | pct
     dec: int = 2
     summary: str | None = None   # "equity" or "macro" if shown on page one
@@ -129,12 +129,26 @@ FX_MORE = [
     I("usdzar", "USD/ZAR", "ZAR=X", dec=4),
 ]
 
-# Policy rates FRED publishes daily. Every other central bank is read from
-# central_banks.json (andra/fx.py).
+# Central bank policy rates. The Fed and the ECB from FRED; every other bank
+# from the BIS central bank policy rates dataset (WS_CBPOL, daily series,
+# ticker = the BIS reference area).
 POLICY = [
     I("fedupper", "Fed funds target, upper bound", "DFEDTARU", "fred", "pct"),
     I("fedlower", "Fed funds target, lower bound", "DFEDTARL", "fred", "pct"),
     I("ecbdfr", "ECB deposit facility rate", "ECBDFR", "fred", "pct"),
+    I("pol_jp", "Bank of Japan policy rate", "JP", "bis", "pct"),
+    I("pol_gb", "Bank of England Bank Rate", "GB", "bis", "pct"),
+    I("pol_ch", "SNB policy rate", "CH", "bis", "pct"),
+    I("pol_ca", "Bank of Canada policy rate", "CA", "bis", "pct"),
+    I("pol_au", "RBA cash rate target", "AU", "bis", "pct"),
+    I("pol_nz", "RBNZ official cash rate", "NZ", "bis", "pct"),
+    I("pol_cn", "PBoC policy rate", "CN", "bis", "pct"),
+    I("pol_mx", "Banxico policy rate", "MX", "bis", "pct"),
+    I("pol_br", "Selic target", "BR", "bis", "pct"),
+    I("pol_in", "RBI policy repo rate", "IN", "bis", "pct"),
+    I("pol_kr", "Bank of Korea base rate", "KR", "bis", "pct"),
+    I("pol_za", "SARB repo rate", "ZA", "bis", "pct"),
+    I("pol_tr", "CBRT one-week repo rate", "TR", "bis", "pct"),
 ]
 
 COMMODITIES = [
@@ -185,6 +199,11 @@ BLOCKS: dict[str, list[Instrument]] = {
 
 def all_instruments() -> list[Instrument]:
     return [i for b in BLOCKS.values() for i in b]
+
+
+def fx_only_keys() -> set[str]:
+    """Series read only by the FX analysis, never by the close note."""
+    return {i.key for b in ("fx_more", "policy") for i in BLOCKS[b]}
 
 
 def summary_block(kind: str) -> list[Instrument]:

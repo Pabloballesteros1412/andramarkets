@@ -14,29 +14,27 @@ Built on the same MarketFrame and the same figure check as the close note:
                a draft that fails goes back with the reason.
     to_site    the JSON the site imports for its FX section (fx_YYYYMMDD.json).
 
-Policy rates: the Fed and the ECB come from FRED every day. Every other bank
-comes from central_banks.json, which the desk maintains; an entry is used only
-when it is marked verified and its next meeting has not yet come, so a rate
-is never printed from memory or after a decision it does not reflect.
+Policy rates come from official machine-readable sources only, read with the
+rest of the market data (andra/data.py): the Fed and the ECB from FRED, every
+other bank from the BIS central bank policy rates dataset. Each rate carries
+its source, its series and the date of its last observation (BIS trails by a
+few days), and its last decision is read from the series itself.
 """
 from __future__ import annotations
 
-import datetime as dt
 import json
 import logging
 import os
 import re
-from pathlib import Path
 
 import pandas as pd
 
 from .narrative import (MAX_TOKENS, MODEL, SYSTEM, Note, _metered, audit,
                         parse_reply)
+from .universe import BLOCKS
 
 log = logging.getLogger("andra.fx")
 
-ROOT = Path(__file__).resolve().parent.parent
-BANKS_FILE = ROOT / "central_banks.json"
 SCHEMA_ID = "andra.fx/1"
 
 # (key, currency, group). Order is the order of the tables.
@@ -50,19 +48,35 @@ PAIRS = (
     ("usdinr", "INR", "em"), ("usdkrw", "KRW", "em"), ("usdzar", "ZAR", "em"),
     ("usdtry", "TRY", "em"),
 )
-# Policy rates read from FRED: currency -> MarketFrame key.
-FRED_POLICY = {"USD": "fedupper", "EUR": "ecbdfr"}
-AHEAD_DAYS = 14
+# currency -> (MarketFrame key of its policy rate, central bank, short name)
+BANKS = {
+    "USD": ("fedupper", "Federal Reserve", "Fed"),
+    "EUR": ("ecbdfr", "European Central Bank", "ECB"),
+    "JPY": ("pol_jp", "Bank of Japan", "BoJ"),
+    "GBP": ("pol_gb", "Bank of England", "BoE"),
+    "CHF": ("pol_ch", "Swiss National Bank", "SNB"),
+    "CAD": ("pol_ca", "Bank of Canada", "BoC"),
+    "AUD": ("pol_au", "Reserve Bank of Australia", "RBA"),
+    "NZD": ("pol_nz", "Reserve Bank of New Zealand", "RBNZ"),
+    "CNY": ("pol_cn", "People's Bank of China", "PBoC"),
+    "MXN": ("pol_mx", "Banco de Mexico", "Banxico"),
+    "BRL": ("pol_br", "Banco Central do Brasil", "BCB"),
+    "INR": ("pol_in", "Reserve Bank of India", "RBI"),
+    "KRW": ("pol_kr", "Bank of Korea", "BoK"),
+    "ZAR": ("pol_za", "South African Reserve Bank", "SARB"),
+    "TRY": ("pol_tr", "Central Bank of the Republic of Turkiye", "CBRT"),
+}
+SOURCES = {"fred": "FRED", "bis": "BIS central bank policy rates (WS_CBPOL)"}
 
 WORDS_MIN, WORDS_MAX = 800, 1200
 FIELDS = ("headline", "standfirst", "takeaways", "dollar", "majors", "em",
-          "drivers", "levels", "ahead")
+          "drivers", "levels")
 LISTS = ("takeaways", "levels")
 # Sections as the PDF and the site print them, in order.
 SECTIONS = (("dollar", "The dollar"), ("majors", "G10 majors"),
             ("em", "Emerging markets"),
             ("drivers", "Rate differentials and central banks"),
-            ("levels", "Levels that matter"), ("ahead", "Ahead"))
+            ("levels", "Levels that matter"))
 # Trade language. The note describes; it never tells anyone what to do.
 _ADVICE = re.compile(
     r"\b(?:recommend\w*|we (?:like|prefer|favou?r|expect|see value)|"
@@ -73,23 +87,20 @@ _ADVICE = re.compile(
 
 
 # ------------------------------------------------------------- policy rates
-def load_banks(path: Path = BANKS_FILE) -> dict:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        log.warning("%s not found: only the FRED policy rates are used.", path.name)
-        return {}
-    return {k: v for k, v in data.items() if not k.startswith("_")}
-
-
-def _fred_policy(mf, key: str) -> dict | None:
+def _policy(mf, key: str) -> dict | None:
+    """A policy rate as its source last published it, with the date of that
+    observation and the last decision read from the series."""
     if key not in mf.px.columns:
         return None
     s = mf.px[key].dropna()
     if s.empty:
         return None
-    out = {"rate": round(float(s.iloc[-1]), 2), "last_decision": None,
-           "last_change_bp": None}
+    ins = next(i for i in BLOCKS["policy"] if i.key == key)
+    as_of = (str(mf.snap.at[key, "date"]) if key in mf.snap.index
+             else s.index[-1].date().isoformat())
+    out = {"rate": round(float(s.iloc[-1]), 2), "as_of": as_of,
+           "source": SOURCES[ins.src], "series": ins.ticker,
+           "last_decision": None, "last_change_bp": None}
     d = s.diff()
     moved = d[d.abs() > 1e-9]
     if not moved.empty:
@@ -98,37 +109,19 @@ def _fred_policy(mf, key: str) -> dict | None:
     return out
 
 
-def policy_rates(mf, banks: dict, asof: dt.date) -> tuple[dict, list, list]:
-    """currency -> policy entry, plus the banks not on file and the banks
-    whose entry is out of date (its next meeting has come)."""
-    out, missing, stale = {}, [], []
-    for ccy, b in banks.items():
-        nxt = b.get("next_meeting")
-        nxt_d = dt.date.fromisoformat(nxt) if nxt else None
-        entry = {"bank": b.get("bank"), "short": b.get("short"),
-                 "rate_name": b.get("rate_name"),
-                 "next_meeting": nxt if (b.get("verified") and nxt_d and nxt_d > asof) else None}
-        if ccy in FRED_POLICY:
-            got = _fred_policy(mf, FRED_POLICY[ccy])
-            if got is None:
-                missing.append(b.get("short") or ccy)
-                continue
-            entry.update(got, source="FRED")
-            if ccy == "USD" and "fedlower" in mf.px.columns:
-                lo = mf.px["fedlower"].dropna()
-                entry["rate_lower"] = round(float(lo.iloc[-1]), 2) if not lo.empty else None
-        elif not b.get("verified") or b.get("rate") is None:
-            missing.append(b.get("short") or ccy)
+def policy_rates(mf) -> tuple[dict, list]:
+    """currency -> policy entry, and the banks with no rate this run."""
+    out, missing = {}, []
+    for ccy, (key, bank, short) in BANKS.items():
+        got = _policy(mf, key)
+        if got is None:
+            missing.append(short)
             continue
-        elif nxt_d and nxt_d <= asof:
-            stale.append(b.get("short") or ccy)
-            continue
-        else:
-            entry.update(rate=float(b["rate"]), last_decision=b.get("last_decision"),
-                         last_change_bp=b.get("last_change_bp"),
-                         source=b.get("source"))
-        out[ccy] = entry
-    return out, missing, stale
+        out[ccy] = {"bank": bank, "short": short, **got}
+        if ccy == "USD":
+            lo = _policy(mf, "fedlower")
+            out[ccy]["rate_lower"] = lo["rate"] if lo else None
+    return out, missing
 
 
 # ---------------------------------------------------------------- the facts
@@ -168,12 +161,10 @@ def _nearest(last: float, levels: dict, dec: int) -> dict:
     return out
 
 
-def fx_facts(mf, banks: dict | None = None) -> dict:
+def fx_facts(mf) -> dict:
     """The FX fact pack. Nothing else is admissible in the FX note."""
-    asof = mf.asof
-    target = asof.isoformat()
-    banks = load_banks() if banks is None else banks
-    policy, banks_missing, banks_stale = policy_rates(mf, banks, asof)
+    target = mf.asof.isoformat()
+    policy, banks_missing = policy_rates(mf)
     fed = policy.get("USD")
     ust2y = mf.px["ust2y"].diff() if "ust2y" in mf.px.columns else None
 
@@ -229,20 +220,13 @@ def fx_facts(mf, banks: dict | None = None) -> dict:
                      key=lambda p: p["ccy_vs_usd"][h], reverse=True)
         ranked[h] = [{"currency": p["currency"], "vs_usd": p["ccy_vs_usd"][h]} for p in got]
     main = sorted((p for p in pairs if p["z"] is not None), key=lambda p: -abs(p["z"]))[:4]
-    end = asof + dt.timedelta(days=AHEAD_DAYS)
-    ahead = sorted(({"date": p["next_meeting"], "bank": p["bank"], "currency": c}
-                    for c, p in policy.items()
-                    if p.get("next_meeting") and asof < dt.date.fromisoformat(p["next_meeting"]) <= end),
-                   key=lambda e: e["date"])
     return {
         "date": target,
         "pairs": pairs,
         "us_rates": {"fed": fed, "ust2y": us("ust2y"), "ust10y": us("ust10y")},
         "strength_vs_usd": ranked,
         "main_moves": [p["key"] for p in main],
-        "central_bank_meetings_ahead": ahead,
-        "banks_not_on_file": banks_missing,
-        "banks_out_of_date": banks_stale,
+        "banks_without_rate": banks_missing,
         "pairs_without_print": missing,
         "pairs_off_session": [p["key"] for p in pairs if p["off_session"]],
     }
@@ -293,16 +277,20 @@ low, the 50- and 200-day averages and the 52-week high and low; "nearest"
 gives the closest level above and below the close and the distance in
 percent, and under "at" any level the close sits on. "corr_ust2y_60d" is
 the 60-session correlation of the pair's daily change with the US 2-year
-yield's. "policy" is the central bank's rate as on file and "vs_fed_bp" its
-differential to the top of the Fed's target range in basis points. "us_rates" holds the Fed range and the US 2-year and 10-year
-yields with their moves in basis points.
+yield's. "policy" is the central bank's policy rate as its source last
+published it: "as_of" is the date of that observation, "last_decision" and
+"last_change_bp" the last change in the series, and "vs_fed_bp" the
+differential to the top of the Fed's target range in basis points.
+"us_rates" holds the Fed range and the US 2-year and 10-year yields with
+their moves in basis points.
 
-Rules for the central bank context. State a policy rate, a decision or a
-meeting date only if it is in the pack. If a row's "policy" is null, do not
-give that bank's rate or describe its stance from memory; say at most that
-its rate is not on file. Do not claim a central bank caused a move. Say what
-the rate differential and the US front end did, and whether the pair moved
-with them or against them.
+Rules for the central bank context. State a policy rate or a decision only
+if it is in the pack, and give a rate's "as_of" date with it when that date
+is not the session's. If a row's "policy" is null, do not give that bank's
+rate or describe its stance from memory; say at most that no rate was
+available. Do not mention meeting dates: the pack has none. Do not claim a
+central bank caused a move. Say what the rate differential and the US front
+end did, and whether the pair moved with them or against them.
 
 ===headline===
 8 to 13 words. What the dollar did and the move that mattered, as a claim.
@@ -326,18 +314,14 @@ Two paragraphs: the EM pairs, Asia apart from Latin America and EMEA, with
 their moves on the day, week and month.
 
 ===drivers===
-Two paragraphs: the rate differentials and central bank context behind the
-main moves, and which pairs followed the US 2-year and which did not.
+Two or three paragraphs: the rate differentials and central bank context
+behind the main moves, including the last decisions in the pack, and which
+pairs followed the US 2-year and which did not.
 
 ===levels===
 One line per pair for six to eight pairs, starting with the main moves: the
 close and the nearest levels above and below it from "levels". Plain
 statement, no view on whether a level will hold.
-
-===ahead===
-One paragraph on the central bank meetings in "central_bank_meetings_ahead".
-If it is empty, one sentence saying no meeting on file falls in the next two
-weeks.
 """
 
 
@@ -479,7 +463,7 @@ def write_without_model(facts: dict) -> Note:
                     f"{two['d1_bp']:+.1f}bp on the day.")
     content = {"headline": head, "standfirst": " ".join(stand), "takeaways": take,
                "dollar": "", "majors": "", "em": "", "drivers": drivers.strip(),
-               "levels": level_lines(facts), "ahead": ""}
+               "levels": level_lines(facts)}
     return Note(_complete(content), audit_ok=not audit(content, facts))
 
 

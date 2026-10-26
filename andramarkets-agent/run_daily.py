@@ -210,8 +210,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from andra import fx
         if args.demo:
-            from demo_fixture import demo_banks, demo_fx_note
-            fx_facts = fx.fx_facts(mf, demo_banks(date))
+            from demo_fixture import demo_fx_note
+            fx_facts = fx.fx_facts(mf)
             fx_note, fx_mode = demo_fx_note(fx_facts), "demo"
         else:
             # A replay from the archive has no price history to rebuild the
@@ -292,8 +292,7 @@ def main(argv: list[str] | None = None) -> int:
                     "attempts": fx_note.attempts, "mode": fx_mode,
                     "words": site["word_count"],
                     "trade_language": site["trade_language_flags"],
-                    "banks_not_on_file": fx_facts["banks_not_on_file"],
-                    "banks_out_of_date": fx_facts["banks_out_of_date"],
+                    "banks_without_rate": fx_facts["banks_without_rate"],
                     "pdf": bool(fx_pdf),
                     "tokens": {"input": fx_note.usage["input_tokens"],
                                "output": fx_note.usage["output_tokens"]},

@@ -135,11 +135,16 @@ checked for trade language; a draft that fails goes back to the model with
 the reason. Its facts are saved in `facts_*.json` under `fx_analysis`, and
 the note with its facts in `fx_*.json`, which is archived with the PDF.
 
-Policy rates: the Fed and the ECB are read from FRED. Every other bank is
-read from `central_banks.json`, which you keep up to date: an entry is used
-only once `verified` is true, and it drops out on the day of its
-`next_meeting` until you update it. The email's pre-flight names the banks
-to update.
+Policy rates come from official machine-readable sources, with no manual
+step: the Fed and the ECB from FRED, every other bank from the BIS central
+bank policy rates dataset (`WS_CBPOL`, read in `data.py` like any other
+provider). Each rate is stored with its source, its series and the date of
+its latest observation, which the note prints: BIS trails by a few days.
+The last decision is read from the series itself.
+
+A manual run of the daily workflow with **check** ticked builds every file
+from live data with the model but sends no email and commits or archives
+nothing; its artifact is `andramarkets-check-<run id>`.
 
 ### Voice
 
@@ -155,7 +160,8 @@ the email.
 | Source | Covers | Cost |
 |---|---|---|
 | Yahoo | global equities, FX, commodities, volatility, digital | free |
-| FRED | Treasury curve, breakevens, real yields | free, needs a key |
+| FRED | Treasury curve, breakevens, real yields, Fed and ECB rates | free, needs a key |
+| BIS | central bank policy rates for the FX analysis | free |
 | `bloomberg` stub | global sovereigns, CDX, iTraxx | terminal |
 
 `data.py` exposes one contract (`MarketFrame`), so wiring blpapi or Refinitiv

@@ -90,26 +90,27 @@
   </div>
 
   <div class="section flow">
-    {{ sec("5.0", "Rate differentials and central banks", "Policy rates on file") }}
+    {{ sec("5.0", "Rate differentials and central banks", "Policy rates, latest published") }}
     {{ prose("drivers") }}
     <div class="g-2" style="margin-top:3mm">
       <div>
-        <table><thead><tr><th>Bank</th><th>Rate</th><th>vs Fed</th><th>Last move</th><th>Next</th></tr></thead><tbody>
+        <table><thead><tr><th>Bank</th><th>Rate</th><th>vs Fed</th><th>Last move</th><th>As of</th></tr></thead><tbody>
         {% if fed %}<tr><td>Fed &middot; USD</td>
           <td>{% if fed.rate_lower is not none %}{{ fed.rate_lower | num(2) }}-{% endif %}{{ fed.rate | num(2) }}%</td>
           <td>&middot;</td>
           <td class="{{ fed.last_change_bp | dir }}">{% if fed.last_change_bp is not none %}{{ fed.last_change_bp | bp }}{% else %}n/a{% endif %}</td>
-          <td>{{ fed.next_meeting or "n/a" }}</td></tr>{% endif %}
+          <td>{{ fed.as_of }}</td></tr>{% endif %}
         {% for b in banks %}<tr><td>{{ b.short }} &middot; {{ b.currency }}</td>
           <td>{{ b.rate | num(2) }}%</td>
           <td>{% if b.vs_fed_bp is not none %}{{ b.vs_fed_bp | bp }}{% else %}n/a{% endif %}</td>
           <td class="{{ b.last_change_bp | dir }}">{% if b.last_change_bp is not none %}{{ b.last_change_bp | bp }}{% else %}n/a{% endif %}</td>
-          <td>{{ b.next_meeting or "n/a" }}</td></tr>{% endfor %}
+          <td>{{ b.as_of }}</td></tr>{% endfor %}
         </tbody></table>
         <div class="ex-src">Differential to the top of the Fed's target range, basis points.
-          Fed and ECB from FRED; other banks from the desk's policy-rate file.
-          {% if banks_not_on_file %}Not on file: {{ banks_not_on_file | join(", ") }}.{% endif %}
-          {% if banks_out_of_date %} Left out pending an update after their last meeting: {{ banks_out_of_date | join(", ") }}.{% endif %}</div>
+          Fed and ECB from FRED; other banks from the BIS central bank policy rates
+          dataset. As of: date of the latest published observation. Last move: the
+          last change in the series.
+          {% if banks_without_rate %}No rate available this edition: {{ banks_without_rate | join(", ") }}.{% endif %}</div>
       </div>
       <div>{% if ex.m1 %}{{ exh(2, "Currencies against the dollar, one month", ex.m1,
             "Percent, 21 sessions. Positive when the currency gained on the dollar. Source: Andra Markets.") }}{% endif %}</div>
@@ -127,24 +128,17 @@
     {% if n.levels %}<ul class="levels" style="margin-top:3mm">{% for l in n.levels %}<li>{{ l }}</li>{% endfor %}</ul>{% endif %}
   </div>
 
-  {% if n.ahead %}
   <div class="section">
-    {{ sec("7.0", "Ahead", "Central bank meetings on file, next two weeks") }}
-    {{ prose("ahead") }}
-  </div>
-  {% endif %}
-
-  <div class="section">
-    {{ sec("8.0", "Methodology") }}
+    {{ sec("7.0", "Methodology") }}
     <p style="font-size:6.8pt">Levels are New York closing prints for the session
     shown. Daily, weekly and monthly moves are percent changes over one, five and
     21 sessions, for each pair as quoted: a rise in a USD/XXX pair is a stronger
     dollar, a rise in EUR/USD, GBP/USD, AUD/USD or NZD/USD a weaker one. Exhibits
     show each currency's own move against the dollar. Levels that matter are the
     1-month and 52-week high and low and the 50- and 200-day averages of daily
-    closes. Policy rates for the Fed and the ECB are read from FRED; other central
-    banks come from a policy-rate file maintained by the desk and are used only
-    once checked against the bank's own publication and before its next meeting.
+    closes. Policy rates for the Fed and the ECB are read from FRED and
+    those of every other central bank from the BIS central bank policy rates
+    dataset, each at its latest published observation, dated in the table.
     Differentials are against the top of the Fed's target range.
     {% if pairs_without_print %} No print this session for {{ pairs_without_print | join(", ") }}.{% endif %}
     Every figure in the text passes the same automated trace check as the daily

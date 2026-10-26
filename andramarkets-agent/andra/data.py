@@ -25,7 +25,7 @@ from dataclasses import dataclass, field as dc_field
 import numpy as np
 import pandas as pd
 
-from .universe import BLOCKS, Instrument, all_instruments
+from .universe import BLOCKS, Instrument, all_instruments, fx_only_keys
 
 log = logging.getLogger("andra.data")
 WINDOW_DAYS = 400
@@ -153,6 +153,33 @@ def _fred(instrs: list[Instrument], start: dt.date, end: dt.date) -> pd.DataFram
     return pd.DataFrame(out)
 
 
+BIS_URL = "https://stats.bis.org/api/v1/data/WS_CBPOL/D.{areas}/all"
+
+
+def _bis(instrs: list[Instrument], start: dt.date, end: dt.date) -> pd.DataFrame:
+    """Central bank policy rates from the BIS (WS_CBPOL), one request for every
+    reference area, asked for once more after a pause if it fails."""
+    import io
+    import urllib.request
+    url = (BIS_URL.format(areas="+".join(i.ticker for i in instrs))
+           + f"?startPeriod={start.isoformat()}&endPeriod={end.isoformat()}"
+           f"&detail=dataonly&format=csv")
+    for attempt in (1, 2):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as r:
+                raw = pd.read_csv(io.BytesIO(r.read()))
+            break
+        except Exception as e:  # noqa: BLE001
+            log.warning("BIS policy rates failed (attempt %d): %s", attempt, e)
+            if attempt == 2:
+                return pd.DataFrame()
+            time.sleep(5)
+    wide = raw.pivot_table(index="TIME_PERIOD", columns="REF_AREA", values="OBS_VALUE")
+    wide.index = pd.to_datetime(wide.index)
+    keys = {i.ticker: i.key for i in instrs}
+    return wide[[a for a in wide.columns if a in keys]].rename(columns=keys)
+
+
 def _bloomberg(instrs: list[Instrument], start, end) -> pd.DataFrame:
     """Extension point. Wire blpapi or Refinitiv here in production.
 
@@ -163,7 +190,7 @@ def _bloomberg(instrs: list[Instrument], start, end) -> pd.DataFrame:
     return pd.DataFrame()
 
 
-PROVIDERS = {"yahoo": _yahoo, "fred": _fred, "bloomberg": _bloomberg}
+PROVIDERS = {"yahoo": _yahoo, "fred": _fred, "bis": _bis, "bloomberg": _bloomberg}
 
 
 def load(asof: dt.date | None = None) -> MarketFrame:
@@ -201,12 +228,15 @@ def load(asof: dt.date | None = None) -> MarketFrame:
     # So: charts read the filled frame, every change reads the raw one.
     px = raw.ffill(limit=3)
 
-    missing = sorted({i.key for i in all_instruments()} - set(raw.columns))
+    # The FX analysis's own series are reported by the FX analysis, not in the
+    # close note's counts (BIS policy rates always trail by a few days).
+    fx_only = fx_only_keys()
+    missing = sorted({i.key for i in all_instruments()} - set(raw.columns) - fx_only)
     if missing:
         log.warning("No print for %d series: %s", len(missing), ", ".join(missing[:12]))
 
     snap = snapshot(raw, times)
-    stale = _stale(raw, asof)
+    stale = [k for k in _stale(raw, asof) if k not in fx_only]
     if stale:
         log.warning("%d series had no print for %s and are quoted at their last "
                     "close: %s", len(stale), asof, ", ".join(stale[:12]))
@@ -243,7 +273,10 @@ def snapshot(px: pd.DataFrame, times: dict[str, str] | None = None) -> pd.DataFr
         is_rate = ins.unit == "pct"
 
         ytd_base = s[s.index.year == s.index[-1].year]
-        ytd_px = np.nan if ytd_base.empty else 100.0 * (last / float(ytd_base.iloc[0]) - 1.0)
+        # Rates take their YTD in basis points below; a rate at zero (the SNB)
+        # would divide by zero here.
+        ytd_px = (np.nan if ytd_base.empty or is_rate
+                  else 100.0 * (last / float(ytd_base.iloc[0]) - 1.0))
 
         r = s.pct_change().dropna().tail(252)
         z = (r.iloc[-1] - r.mean()) / r.std() if len(r) > 30 and r.std() else np.nan

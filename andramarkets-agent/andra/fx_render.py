@@ -63,8 +63,7 @@ def build_context(facts: dict, note, ex: dict, edition="") -> dict:
         "em": [_row(r) for r in pairs if r["group"] == "em"],
         "levels": pairs,
         "banks": banks, "fed": fed,
-        "banks_not_on_file": facts["banks_not_on_file"],
-        "banks_out_of_date": facts["banks_out_of_date"],
+        "banks_without_rate": facts["banks_without_rate"],
         "pairs_without_print": facts["pairs_without_print"],
         "ex": ex,
     }

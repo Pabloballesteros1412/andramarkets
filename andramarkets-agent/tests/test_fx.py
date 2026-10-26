@@ -10,7 +10,7 @@ from andra.analytics import fresh_extremes
 from andra.narrative import audit
 from andra.render import _env
 from andra.universe import BLOCKS
-from demo_fixture import demo_banks, demo_fx_note, synthetic_frame
+from demo_fixture import demo_fx_note, synthetic_frame
 
 DAY = dt.date(2026, 10, 22)
 
@@ -22,7 +22,7 @@ def mf():
 
 @pytest.fixture(scope="module")
 def facts(mf):
-    return fx.fx_facts(mf, demo_banks(DAY))
+    return fx.fx_facts(mf)
 
 
 def pair(facts, key):
@@ -57,20 +57,53 @@ def test_policy_differential_is_to_the_top_of_the_fed_range(facts):
     assert gbp["vs_fed_bp"] == -25 and eur["source"] == "FRED" and eur["vs_fed_bp"] == -200
 
 
-def test_out_of_date_and_unverified_banks_are_left_out(mf):
-    banks = demo_banks(DAY)
-    banks["BRL"]["verified"] = False
-    f = fx.fx_facts(mf, banks)
-    assert f["banks_out_of_date"] == ["CBRT"] and f["banks_not_on_file"] == ["BCB"]
-    assert pair(f, "usdtry")["policy"] is None and pair(f, "usdbrl")["policy"] is None
-    assert all(e["date"] > DAY.isoformat() for e in f["central_bank_meetings_ahead"])
+def test_every_rate_carries_its_source_series_and_date(facts):
+    jpy = pair(facts, "usdjpy")["policy"]
+    assert jpy["source"].startswith("BIS") and jpy["series"] == "JP"
+    assert jpy["as_of"] == DAY.isoformat() and jpy["last_change_bp"] == -25
+    assert pair(facts, "eurusd")["policy"]["series"] == "ECBDFR"
+    assert facts["banks_without_rate"] == []
 
 
-def test_shipped_bank_file_prints_no_unverified_rate(mf):
-    f = fx.fx_facts(mf)          # central_banks.json as committed
-    on_file = [p["key"] for p in f["pairs"] if p["policy"] and p["policy"]["source"] != "FRED"]
-    assert on_file == [] or all(fx.load_banks()[pair(f, k)["currency"]]["verified"]
-                                for k in on_file)
+def test_a_bank_with_no_series_is_reported_not_guessed(mf):
+    import copy
+    thin = copy.copy(mf)
+    thin.px = mf.px.drop(columns=["pol_br"])
+    thin.snap = mf.snap.drop(index=["pol_br"])
+    f = fx.fx_facts(thin)
+    assert f["banks_without_rate"] == ["BCB"] and pair(f, "usdbrl")["policy"] is None
+
+
+def test_bis_rates_are_parsed_into_frame_columns(monkeypatch):
+    from andra import data
+    csv = (b"FREQ,REF_AREA,TIME_PERIOD,OBS_VALUE\n"
+           b"D,JP,2026-10-15,1.0\nD,JP,2026-10-16,1.25\nD,TR,2026-10-16,37.0\n")
+
+    class Resp:
+        def __init__(self, url):
+            assert "WS_CBPOL/D.JP+TR/" in url and "detail=dataonly" in url
+
+        def read(self):
+            return csv
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout: Resp(url))
+    ins = [i for i in BLOCKS["policy"] if i.ticker in ("JP", "TR")]
+    got = data._bis(ins, dt.date(2026, 10, 1), DAY)
+    assert list(got.columns) == ["pol_jp", "pol_tr"]
+    assert got["pol_jp"].tolist() == [1.0, 1.25]
+
+
+def test_fx_only_series_stay_out_of_the_close_note_counts():
+    from andra.universe import fx_only_keys
+    assert {"pol_jp", "fedupper", "nzdusd"} <= fx_only_keys()
+    assert not fx_only_keys() & {i.key for i in BLOCKS["fx"]}
 
 
 def test_nearest_level_is_never_the_close_itself():
@@ -142,7 +175,7 @@ def run(monkeypatch, facts, replies):
 def test_short_or_advisory_draft_goes_back_with_the_reason(monkeypatch, facts):
     good = demo_fx_note(facts).content
     short = {**good, **{k: good[k].split("\n\n")[0][:80] for k in ("dollar", "majors", "em", "drivers")}}
-    advice = {**good, "ahead": good["ahead"] + " We prefer to buy the euro here."}
+    advice = {**good, "drivers": good["drivers"] + " We prefer to buy the euro here."}
     note, sent = run(monkeypatch, facts, [reply(tagged(short)), reply(tagged(advice)),
                                           reply(tagged(good))])
     assert note.attempts == 3 and note.audit_ok
@@ -180,7 +213,7 @@ def test_template_renders_every_section(facts):
     html = _env().get_template("fx.html.j2").render(**ctx)
     for title in ("Key takeaways", "The dollar", "G10 majors", "Emerging markets",
                   "Rate differentials and central banks", "Levels that matter",
-                  "Ahead", "Methodology", "Disclaimer"):
+                  "Methodology", "Disclaimer", "BIS central bank policy rates"):
         assert title in html
     assert html.count("<tr>") >= 15 + 14 + 15
 
