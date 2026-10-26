@@ -29,8 +29,8 @@ import re
 
 import pandas as pd
 
-from .narrative import (MAX_TOKENS, MODEL, SYSTEM, Note, _metered, audit,
-                        parse_reply)
+from .narrative import (MAX_TOKENS, MODEL, SYSTEM, THINKING, Note, _metered,
+                        audit, parse_reply)
 from .universe import BLOCKS
 
 log = logging.getLogger("andra.fx")
@@ -334,9 +334,9 @@ def _complete(content: dict) -> dict:
 
 
 def _call(client, messages: list[dict], meter: dict) -> dict:
-    # Plain call: no thinking parameter, no temperature (CLAUDE.md).
+    # Thinking explicitly disabled, no temperature (CLAUDE.md).
     r = _metered(meter, client.messages.create, model=MODEL, max_tokens=MAX_TOKENS,
-                 system=FX_SYSTEM, messages=messages)
+                 system=FX_SYSTEM, messages=messages, thinking=THINKING)
     txt = "".join(getattr(b, "text", "") for b in r.content if b.type == "text").strip()
     if not txt:
         raise ValueError(f"reply carried no text (stop: {r.stop_reason}).")

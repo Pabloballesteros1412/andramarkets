@@ -181,8 +181,9 @@ def test_short_or_advisory_draft_goes_back_with_the_reason(monkeypatch, facts):
     assert note.attempts == 3 and note.audit_ok
     asks = [m["content"] for m in sent[-1]["messages"] if m["role"] == "user"][1:]
     assert "words" in asks[0] and "trade language" in asks[1]
-    # Plain call (CLAUDE.md): no thinking parameter, no temperature.
-    assert not {"thinking", "temperature"} & set(sent[0])
+    # CLAUDE.md: thinking explicitly disabled on every call, no temperature.
+    assert all(s["thinking"] == {"type": "disabled"} for s in sent)
+    assert "temperature" not in sent[0]
 
 
 def test_invented_figure_fails_the_note(monkeypatch, facts):
