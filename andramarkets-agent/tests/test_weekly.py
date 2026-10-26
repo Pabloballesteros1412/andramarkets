@@ -209,7 +209,9 @@ def test_model_review_is_checked_and_sent_back_once(monkeypatch):
     assert note.audit_ok and note.attempts == 2
     assert "3.33%" in c.seen[1]["messages"][-1]["content"]
     assert c.seen[0]["system"].startswith("You write the weekly market review")
-    assert "thinking" not in c.seen[0]
+    # CLAUDE.md: thinking explicitly disabled on every call, retries included.
+    assert all(s["thinking"] == {"type": "disabled"} for s in c.seen)
+    assert "temperature" not in c.seen[0]
 
 
 # --------------------------------------------------------------- end to end

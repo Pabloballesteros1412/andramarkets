@@ -68,7 +68,10 @@ def test_usage_survives_a_writer_that_gives_up(monkeypatch):
     assert e.value.usage["calls"] == 3 and e.value.usage["output_tokens"] == 15
 
 
-def test_plain_call_without_thinking_and_a_stripped_key(monkeypatch):
+def test_thinking_disabled_and_a_stripped_key(monkeypatch):
+    """CLAUDE.md: thinking explicitly disabled. Without it the model spent the
+    whole budget thinking on all three attempts of the 23 Oct 2026 note
+    (blocks ['thinking'], stop max_tokens) and the note shipped as tables."""
     seen = {}
 
     class Recording(Client):
@@ -83,6 +86,6 @@ def test_plain_call_without_thinking_and_a_stripped_key(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", " sk-test\n")
     monkeypatch.setitem(sys.modules, "anthropic", types.SimpleNamespace(Anthropic=anthropic))
     narrative.write(FACTS)
-    assert "thinking" not in seen and "temperature" not in seen
+    assert seen["thinking"] == {"type": "disabled"} and "temperature" not in seen
     assert seen["max_tokens"] == 16000
     assert seen["api_key"] == "sk-test"

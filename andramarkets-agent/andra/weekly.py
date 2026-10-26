@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
 
-from .narrative import MAX_TOKENS, MODEL, SYSTEM, Note, audit, parse_reply
+from .narrative import MAX_TOKENS, MODEL, SYSTEM, THINKING, Note, audit, parse_reply
 from .universe import all_instruments
 
 log = logging.getLogger("andra.weekly")
@@ -481,9 +481,10 @@ def write(facts: dict, max_attempts: int = 3) -> Note:
     content, bad, last_error = {}, [], None
     for attempt in range(1, max_attempts + 1):
         try:
-            # Plain call, no thinking parameter (CLAUDE.md).
+            # Thinking explicitly disabled, no temperature (CLAUDE.md).
             r = client.messages.create(model=MODEL, max_tokens=MAX_TOKENS,
-                                       system=WEEKLY_SYSTEM, messages=messages)
+                                       system=WEEKLY_SYSTEM, messages=messages,
+                                       thinking=THINKING)
             txt = "".join(getattr(b, "text", "") for b in r.content if b.type == "text")
             if r.stop_reason == "max_tokens":
                 raise ValueError("reply hit the token ceiling and is truncated")

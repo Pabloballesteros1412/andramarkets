@@ -237,6 +237,11 @@ def audit(content: dict, facts: dict) -> list[str]:
 
 
 MAX_TOKENS = int(os.getenv("ANDRA_MAX_TOKENS", "16000"))
+# Required on every model call (CLAUDE.md). Without it the model can spend
+# the whole token budget on a hidden thinking block and return no text: the
+# reply comes back as blocks ['thinking'], stop max_tokens. That is how the
+# 23 October 2026 note went out as tables only, after this was removed.
+THINKING = {"type": "disabled"}
 
 FIELDS = ("headline", "standfirst", "takeaways", "equities", "rates", "credit",
           "fx", "commodities", "volatility", "digital", "international",
@@ -298,11 +303,11 @@ def _metered(meter: dict | None, create, **kwargs):
 
 
 def _call(client, messages: list[dict], meter: dict | None = None) -> dict:
-    # Plain call: no thinking parameter, no temperature (CLAUDE.md). A reply
-    # that carries no text or stops at the token ceiling is caught below and
+    # Thinking explicitly disabled, no temperature (CLAUDE.md). A reply that
+    # still carries no text or stops at the token ceiling is caught below and
     # counts as a failed attempt, so it is retried, never printed.
     r = _metered(meter, client.messages.create, model=MODEL, max_tokens=MAX_TOKENS,
-                 system=SYSTEM, messages=messages)
+                 system=SYSTEM, messages=messages, thinking=THINKING)
 
     txt = "".join(getattr(b, "text", "") for b in r.content
                   if b.type == "text").strip()

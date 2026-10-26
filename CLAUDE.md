@@ -29,7 +29,7 @@ Secrets (Anthropic API key, FRED key, SMTP settings) live in GitHub repository s
 
 ## Known technical constraints
 
-- Anthropic API: use plain `client.messages.create()` with no thinking parameter, no temperature, and `MAX_TOKENS=16000`. Otherwise the model can spend the whole budget on thinking and return no text.
+- Anthropic API: every `client.messages.create()` call must pass `thinking={"type": "disabled"}` explicitly (the `THINKING` constant in `andra/narrative.py`), with no temperature and `MAX_TOKENS=16000`. Leaving the parameter out is not the same: the model then defaults to thinking, can spend the whole budget on a hidden thinking block and return no text (`blocks: ['thinking'], stop: max_tokens`). That happened on all three attempts of the 23 October 2026 note, which went out as tables only.
 - Parse model output with tagged section delimiters (for example `===headline===`), not JSON.
 - Strip whitespace from API keys read from secrets. A leading space in the FRED key once silently dropped every rate series.
 - Anchor all dates to New York time (`_ny_now()`), or the report pulls the previous day's data.
