@@ -55,6 +55,14 @@ went out stops on the dedup marker. A manual run can still catch up a missed
 session. Run workflow
 still works by hand; tick resend to send a session again.
 
+**Publishing on the site.** When a real run builds a note, its last archive
+step starts the site's Publish close notes workflow, so the note goes live
+within minutes. It needs the repository secret `SITE_DISPATCH_TOKEN`: a
+fine-grained personal access token with access to
+`Pabloballesteros1412/andramarkets-site` only and the repository permission
+Actions: Read and write. Without it the site still picks the note up on its
+own half-hourly check.
+
 **Monitoring.** The Run monitoring workflow opens an issue titled
 "Missed close note: <date>" when a scheduled run fails (with the failed step
 and the end of its log), and at 22:45 UTC on any NYSE trading day whose note

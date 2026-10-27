@@ -115,6 +115,31 @@ jobs:
           name: ${{ env.ANDRA_DEMO == 'true' && 'andramarkets-demo' || env.ANDRA_CHECK == 'true' && 'andramarkets-check' || 'andramarkets' }}-${{ github.run_id }}
           path: andramarkets-agent/out/
 
+      - name: Publish on the site
+        # Starts the site's Publish close notes workflow, which imports the
+        # artifact uploaded just above, so the note goes live in minutes
+        # instead of at the site's next half-hourly check. Only for a run that
+        # produced a note; demo and check runs never reach the site.
+        # SITE_DISPATCH_TOKEN: fine-grained token on andramarkets-site only,
+        # with Actions: Read and write. Without it the site's schedule still
+        # picks the note up, and this step only warns.
+        if: env.ANDRA_DEMO != 'true' && env.ANDRA_CHECK != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
+        run: |
+          if ! ls out/AndraMarkets_Close_*.pdf >/dev/null 2>&1; then
+            echo "No note built in this run: nothing to publish."
+            exit 0
+          fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::SITE_DISPATCH_TOKEN is not set: the site will pick the note up on its next scheduled check."
+            exit 0
+          fi
+          gh api -X POST repos/Pabloballesteros1412/andramarkets-site/actions/workflows/publish-notes.yml/dispatches \
+            -f ref=main >/dev/null \
+            && echo "Started Publish close notes on andramarkets-site." \
+            || echo "::warning::Could not start Publish close notes on andramarkets-site; the site will pick the note up on its next scheduled check."
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
