@@ -104,10 +104,14 @@ jobs:
       - name: Archive permanently
         # Artifacts expire after 90 days. This keeps the PDF, fact pack, note
         # and chart data for good, as a release in this private repo.
+        # A failure here only warns: it must never stop the next step from
+        # uploading the artifact, or the run's files would exist nowhere.
+        # Archive backfill copies the run later from that artifact.
         if: always() && env.ANDRA_DEMO != 'true' && env.ANDRA_CHECK != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python archive.py out
+        run: |
+          python archive.py out || echo "::warning::Permanent archive failed for this run. Run Actions > Archive backfill before its artifact expires in 90 days."
 
       - name: Archive the edition
         uses: actions/upload-artifact@v4

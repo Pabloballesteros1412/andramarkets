@@ -56,9 +56,12 @@ def test_levels_must_match_to_rounding():
     assert strict("The VIX at 17.6.") == ["17.6"]
 
 
-def test_percentages_within_a_hundredth_of_a_point():
+def test_percentages_within_a_hundredth_of_a_point_or_rounded():
     assert strict("The S&P 500 rose 0.58% and the VIX fell 3.64%, -3.64%.") == []
-    assert strict("The S&P 500 rose 0.6%.") == ["0.6%"]
+    # Rounded to the decimals written: 0.578 as 0.6%, -3.64 as 4% or 3.6%.
+    assert strict("The S&P 500 rose 0.6% and the VIX fell 4%, -3.6%.") == []
+    assert strict("The S&P 500 rose 0.7%.") == ["0.7%"]
+    assert strict("The VIX fell 5%.") == ["5%"]
     assert strict("The S&P 500 rose 0.59%.") == ["0.59%"]   # 0.012 points from 0.578
     assert strict("The S&P 500 rose 0.60%.") == ["0.60%"]
     assert strict("The VIX fell 3.7%.") == ["3.7%"]
