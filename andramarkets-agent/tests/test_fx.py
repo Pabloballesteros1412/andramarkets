@@ -181,6 +181,7 @@ def test_short_or_advisory_draft_goes_back_with_the_reason(monkeypatch, facts):
     assert note.attempts == 3 and note.audit_ok
     asks = [m["content"] for m in sent[-1]["messages"] if m["role"] == "user"][1:]
     assert "words" in asks[0] and "trade language" in asks[1]
+    assert "Add at least" in asks[0] and "to about 1,000." in asks[0]
     # CLAUDE.md: thinking explicitly disabled on every call, no temperature.
     assert all(s["thinking"] == {"type": "disabled"} for s in sent)
     assert "temperature" not in sent[0]
@@ -225,3 +226,15 @@ def test_figures_only_note_skips_a_move_it_does_not_have(facts):
                                for p in facts["pairs"]]}
     note = fx.write_without_model(thin)
     assert note.audit_ok and "on the month" not in note.content["standfirst"]
+
+
+def test_long_draft_is_asked_to_cut_to_the_target(monkeypatch, facts):
+    good = demo_fx_note(facts).content
+    long = {**good, "drivers": good["drivers"] + " The pair held its range." * 120}
+    words = fx.word_count(long)
+    assert words > fx.WORDS_MAX
+    note, sent = run(monkeypatch, facts, [reply(tagged(long)), reply(tagged(good))])
+    assert note.attempts == 2
+    ask = [m["content"] for m in sent[-1]["messages"] if m["role"] == "user"][1]
+    assert f"Cut at least {words - 1000:,} words, to about 1,000." in ask
+    assert "Aim\nfor about 1,000" in sent[0]["messages"][0]["content"]
