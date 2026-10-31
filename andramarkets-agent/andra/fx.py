@@ -69,6 +69,10 @@ BANKS = {
 SOURCES = {"fred": "FRED", "bis": "BIS central bank policy rates (WS_CBPOL)"}
 
 WORDS_MIN, WORDS_MAX = 800, 1200
+# Asked for explicitly: given only the range, the model aims at the ceiling,
+# runs over it (1,203 to 1,328 words on 23 and 30 October) and trims about
+# 30 words per retry, so all three attempts failed and the note shipped long.
+WORDS_TARGET = 1000
 FIELDS = ("headline", "standfirst", "takeaways", "dollar", "majors", "em",
           "drivers", "levels")
 LISTS = ("takeaways", "levels")
@@ -262,8 +266,8 @@ FX_SCHEMA = f"""Output format. Write each section after its tag, on the lines
 below it. Use the tags exactly as written, one per line, in this order. No
 JSON, no markdown, no wrapper.
 
-Length: {WORDS_MIN:,} to {WORDS_MAX:,} words in total, headline excluded. Count
-before you answer.
+Length: {WORDS_MIN:,} to {WORDS_MAX:,} words in total, headline excluded. Aim
+for about {WORDS_TARGET:,}. Count before you answer.
 
 How to read the fact pack. Each row of "pairs" is a pair as quoted: "d1", "w1"
 and "m1" are its move over one session, five sessions and 21 sessions, in
@@ -383,8 +387,11 @@ def write(facts: dict, max_attempts: int = 3) -> Note:
             asks.append(f"The figure check rejected these because they are not in "
                         f"the fact pack: {bad}. Remove them or use the value from the pack.")
         if not WORDS_MIN <= words <= WORDS_MAX:
-            asks.append(f"The note is {words} words. It must be {WORDS_MIN:,} to "
-                        f"{WORDS_MAX:,} words, headline excluded.")
+            verb = "Cut" if words > WORDS_MAX else "Add"
+            asks.append(f"The note is {words:,} words. It must be {WORDS_MIN:,} to "
+                        f"{WORDS_MAX:,} words, headline excluded. {verb} at least "
+                        f"{abs(words - WORDS_TARGET):,} words, to about "
+                        f"{WORDS_TARGET:,}.")
         if flags:
             asks.append(f"These read as trade language and must go: {flags}. The "
                         f"note is neutral and gives no recommendation.")
