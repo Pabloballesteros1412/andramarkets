@@ -132,21 +132,14 @@ def _artifacts(repo: str) -> list[tuple[str, str]]:
     return [(run, name) for _, run, name in sorted(rows)]
 
 
-def _archived_runs(repo: str) -> set[str]:
-    res = _gh("api", "--paginate", f"repos/{repo}/releases?per_page=100",
-              "--jq", '.[] | select(.tag_name | startswith("archive-")) | .assets[].name')
-    return {m.group(1) for m in re.finditer(r"_r(\d+)\.", res.stdout)}
-
-
 def backfill(repo: str) -> int:
+    # Every artifact is checked file by file, not skipped once any of its
+    # files is in the archive: a run whose archive step failed half way keeps
+    # its missing files until the artifact expires.
     arts = _artifacts(repo)
-    done = _archived_runs(repo)
-    log.info("%d edition artifacts still available, %d runs already archived.",
-             len(arts), len(done))
+    log.info("%d edition artifacts still available.", len(arts))
     failed = []
     for run, name in arts:
-        if run in done:
-            continue
         with tempfile.TemporaryDirectory() as tmp:
             got = _gh("run", "download", run, "--repo", repo, "--name", name,
                       "--dir", tmp, check=False)

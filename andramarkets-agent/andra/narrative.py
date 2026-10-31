@@ -214,8 +214,11 @@ def _supported(n: float, signed: bool, decimals: int, unit: str,
     # without ("fell 0.84%") may quote a negative value by its size.
     targets = facts if signed else [abs(v) for v in facts]
     eps = 1e-9
+    # A percentage within 0.01 points, or the stored value rounded half up to
+    # the decimals written (a 10.6% move quoted as 11%, 0.578% as 0.6%).
     if unit == "%":
-        return any(abs(n - v) <= POINT_TOL + eps for v in targets)
+        tol = max(POINT_TOL, 0.5 * 10 ** -decimals)
+        return any(abs(n - v) <= tol + eps for v in targets)
     # Levels, prices, basis points and other ratios: within 0.05%, or the
     # stored value rounded half up to the decimals written (EUR/USD 1.123
     # quoted as 1.12, a 41.5bp spread as 42bp). A whole-number level must be
